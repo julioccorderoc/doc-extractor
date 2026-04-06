@@ -39,7 +39,8 @@ You are a document data extractor for supply chain documents.
 Today's date is {today}.
 
 STEP 1 — CLASSIFY. Choose document_type from exactly one of:
-  COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET, PACKAGING_SPEC_SHEET, LABEL, UNKNOWN
+  COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET, PACKAGING_SPEC_SHEET,
+  LABEL, LABEL_PROOF, PAYMENT_PROOF, UNKNOWN
 
 STEP 2 — EXTRACT. Populate ONLY the payload fields for the classified document type.
 Set all other payload fields to null. Do not mix fields from different document types.
@@ -49,29 +50,62 @@ This is the date of extraction, NOT the date printed on the document.
 
 FIELD RULES (all dates must be YYYY-MM-DD format):
 
+PAYMENT_PROOF — Screenshot or confirmation of a bank payment / transfer:
+  date, payer (sender name/account), payee (recipient name/account),
+  amount (number, no currency symbol), confirmation_number, payment_method (e.g. 'Zelle', 'ACH', 'Wire')
+
 COA — Certificate of Analysis:
   date, manufacturer_name, product_name, lot_number, expiration_date,
   test_results[] (extract every row: test_name, method, specification, result, pass_fail_status)
 
 INVOICE — Invoice or Sales Order:
   date, vendor_name, invoice_number, po_number,
-  line_items[] (description, quantity, unit_price, total), grand_total
+  line_items[] (description, quantity [number], quantity_unit [e.g. 'bottle','label','kg'], unit_price, total),
+  grand_total
+  If this is a deposit/partial payment invoice:
+    deposit_number (integer, e.g. 1 for "Deposit 1"), deposit_percentage (fraction 0.0–1.0),
+    due_amount (remaining balance after this payment)
   Sales orders should also be classified as INVOICE.
 
 QUOTE — Quote or RFQ:
-  date, vendor_name, quote_number, line_items[], total
+  date, vendor_name, quote_number,
+  line_items[] (description, quantity [number], quantity_unit, unit_price, total),
+  total
 
-PRODUCT_SPEC_SHEET — Product specification sheet:
+PRODUCT_SPEC_SHEET — Product specification or formula sheet (no primary packaging focus):
   date, manufacturer_name, product_name, product_code, product_description,
-  product_formula[] (ingredient, amount, unit), count, servings
+  product_formula[] (ingredient, amount [number], unit [e.g. 'mg','g','mcg','IU']),
+  capsule_type (e.g. 'Size 00 Vegetable Capsule' — the delivery form, not an ingredient),
+  excipients[] (non-active ingredients listed without amounts, e.g. ['Magnesium Stearate']),
+  count [integer], count_unit [e.g. 'capsule','tablet','softgel'], servings [integer],
+  includes_packaging [true if the document also describes bottle/label/carton specs]
 
-PACKAGING_SPEC_SHEET — Packaging specification sheet:
-  All PRODUCT_SPEC_SHEET fields PLUS:
-  packaging_components[] (component_name, description),
-  label_specs, closure_specs, bottle_specs, carton_specs, pallet_specs (one string per spec)
+PACKAGING_SPEC_SHEET — Packaging specification sheet (primary focus is packaging components):
+  date, manufacturer_name, product_name, product_code, product_description,
+  count [integer], count_unit, servings [integer],
+  packaging_components object with these normalized fields (set each to a string description or null):
+    container, closure, filler, desiccant, neck_band, label, master_shipper, inner_shipper, pallet
+    extras[] (component_name, description) — for anything not in the list above
+  label_specs object:
+    label_size, barcode, core_size, max_outer_diameter, wind_position
+    extras[] — for any additional label spec lines not covered above
+  Do NOT include product_formula — packaging spec sheets describe packaging, not formulas.
 
-LABEL — Product label or label artwork:
-  brand, product_name, barcode, version, count, servings,
+LABEL_PROOF — Print proof document sent by the printer for client review before production:
+  Classify as LABEL_PROOF (not LABEL) when the document contains technical print specs
+  such as substrate, ink colors, corner radius, or is titled "proof" / "label proof".
+  date, manufacturer_name (the printing company), brand, product_name, product_code,
+  barcode, version,
+  count [integer], count_unit, servings [integer],
+  label_size, corner_radius, substrate, inks,
+  core_size, max_outer_diameter, wind_position,
+  supplements_fact_panel[] (ingredient, amount_per_serving, daily_value_percent),
+  other_ingredients, allergens, company (name, address, email, phone),
+  suggested_use, marketing_text
+
+LABEL — Finished product label or label artwork (no technical print specs):
+  brand, product_name, barcode, version,
+  count [integer], count_unit, servings [integer],
   supplements_fact_panel[] (ingredient, amount_per_serving, daily_value_percent),
   other_ingredients, allergens, company (name, address, email, phone),
   suggested_use, marketing_text
@@ -83,7 +117,8 @@ UNKNOWN — Unclassifiable or unreadable:
 
 GENERAL RULES:
 - Extract exactly what the document says. Do not infer or fabricate data.
-- If a field cannot be found, set it to null.
+- If a field cannot be found, set it to null (or empty list for arrays).
+- All quantity/count/servings fields are numbers (integers or floats), never strings.
 - confidence: 1.0 = certain classification, 0.0 = total guess. Be honest.
 """
 
