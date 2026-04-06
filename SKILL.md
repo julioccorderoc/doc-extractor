@@ -1,0 +1,44 @@
+---
+name: doc-extractor
+description: Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP) using Google Gemini. Invoke when the user runs /doc-extractor <path> or asks to extract or parse a supply chain document.
+disable-model-invocation: true
+allowed-tools:
+  - Bash(python *)
+---
+
+# doc-extractor
+
+Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
+
+## Arguments
+
+The file path follows the invocation: `/doc-extractor <path>`
+
+Capture `<path>` from the user's message. It may be absolute or relative to the project root.
+
+## Execution
+
+```bash
+python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
+```
+
+Capture both stdout (JSON result) and stderr (progress / error messages).
+
+## Exit Code Handling
+
+| Exit code | Meaning | Action |
+|-----------|---------|--------|
+| `0` | Success | Parse stdout as JSON and present the extracted data. Summarize `document_type`, `confidence`, and key payload fields. |
+| `1` | Missing API key | Tell the user: "GEMINI_DOC_EXTRACTOR_KEY is not set. Get a key at https://aistudio.google.com/apikey and run: `export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'`" |
+| `2` | Bad file or path | Show the stderr error message. Confirm the file exists and is a supported type (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`). |
+| `3` | API failure | Show the stderr error message. Suggest the user retry — transient errors (rate limits, server errors) resolve on their own. |
+
+## Success Response Format
+
+On exit code 0, display:
+
+1. The raw JSON (in a code block)
+2. A brief human-readable summary:
+   - Document type and confidence
+   - Key extracted fields (vendor name, invoice number, lot number, product name, etc.)
+   - Any null fields that might indicate extraction gaps

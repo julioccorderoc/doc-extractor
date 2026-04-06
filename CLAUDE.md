@@ -1,12 +1,13 @@
 # doc-extractor
 
-A Claude Code skill that extracts structured JSON from supply chain documents (PDFs, images) using Google's Gemini/Gemma models.
+A skill that extracts structured JSON from supply chain documents (PDFs, images) using Google's Gemini/Gemma models. Agnostic to the invoking agent (Claude Code, Gemini, OpenCode, etc.).
 
 ## Project Structure
 
 ```
-doc-extractor/
-├── CLAUDE.md                     # You are here
+doc-extractor/                    # This directory IS the publishable skill
+├── SKILL.md                      # Skill entry point — agent-agnostic instructions
+├── CLAUDE.md                     # You are here (Claude Code session context)
 ├── docs/
 │   ├── PRD.md                    # Product requirements (source of truth for schemas)
 │   ├── research.md               # Technical research and decisions
@@ -14,15 +15,13 @@ doc-extractor/
 ├── scripts/
 │   ├── parse_vision.py           # Main extraction engine
 │   └── schemas.py                # Pydantic v2 models for all document types
-├── evals/                        # Evaluation framework (EPIC-005)
+├── evals/                        # Evaluation framework (EPIC-006)
+├── tests/                        # Unit tests (pytest)
 ├── test_docs/                    # Real documents for testing (DO NOT commit to public repos)
-├── .ai/
-│   ├── current-plan.md           # Current session's active plan
-│   ├── memory.md                 # Session context and learnings
-│   └── errors.md                 # Known issues and error patterns
-└── .claude/skills/doc-extractor/ # Skill packaging (EPIC-004)
-    ├── SKILL.md
-    └── scripts/                  # Symlinked or copied from root scripts/
+└── .ai/
+    ├── current-plan.md           # Current session's active plan
+    ├── memory.md                 # Session context and learnings
+    └── errors.md                 # Known issues and error patterns
 ```
 
 ## Key Commands
@@ -31,9 +30,9 @@ doc-extractor/
 # Run extraction on a document
 python scripts/parse_vision.py <absolute_file_path>
 
-# Run evals (after EPIC-005)
-python evals/run_evals.py
-python evals/compare.py
+# Run evals (after EPIC-006)
+python evals/snapshot.py approve --all   # seed snapshots
+python evals/snapshot.py compare         # regression check
 ```
 
 ## Environment Variables
@@ -69,7 +68,7 @@ After every session or significant change:
 
 - Test documents live in `test_docs/` — these are real supply chain documents
 - Never commit test docs to public repositories (contain business data)
-- After EPIC-005: use the eval framework to validate changes
+- After EPIC-006: use the eval framework to validate changes
 - Future: integrate with https://github.com/karpathy/autoresearch for automated eval
 
 ### Model Switching

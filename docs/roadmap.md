@@ -25,8 +25,8 @@ that adds schema support must be tested against the relevant files.
 | `$30,806.62 Lysine + Monolaurin Run 11 PO19 Deposit 2 21 Mar 2024.pdf`        | INVOICE              | Manufacturer invoice                   |
 | `(Sales_Order)(PO_PT04)(SO#0007812)(Immune_Support)(Protab).pdf`              | INVOICE              | Sales order (treat as invoice variant) |
 | `(Sales_Order)(PO_PT08)(SO#0007859)(L-Lysine_Monolaurin)(Protab).pdf`         | INVOICE              | Sales order (treat as invoice variant) |
-| `(first_payment)(BN3).png`                                                    | UNKNOWN              | Payment screenshot (image)             |
-| `(first_payment)(NS38)(NutraStar)($33,059.57).png`                            | UNKNOWN              | Payment screenshot (image)             |
+| `(first_payment)(BN3).png`                                                    | PAYMENT_PROOF        | Bank payment screenshot                |
+| `(first_payment)(NS38)(NutraStar)($33,059.57).png`                            | PAYMENT_PROOF        | Bank payment screenshot                |
 | `(packaging_spec_sheet)(3001)(Monolaurin_800mg)(NCL)(Protab)(Signed)(v0).pdf` | PACKAGING_SPEC_SHEET | Signed packaging spec                  |
 | `(packaging_spec_sheet)(4001)(Clean_L-Lysine)(NCL)(Protab)(Signed)(v1).pdf`   | PACKAGING_SPEC_SHEET | Signed packaging spec                  |
 | `(packaging_spec_sheet)(PH4001)(Clean_L-Lysine)(PH)(Protab)(Signed)(v1).pdf`  | PACKAGING_SPEC_SHEET | Different brand (PH)                   |
@@ -43,6 +43,9 @@ that adds schema support must be tested against the relevant files.
 | `COA_100X_Run-19_Gemini_G4_69600_2025-09-25_Gemini.pdf`                       | COA                  | Gemini COA                             |
 | `COA_600X_Run-06_BestNutra_BN2_0125054_2025-04.pdf`                           | COA                  | BestNutra COA                          |
 | `COA_600X_Run-07_VitaNorth_VN1_UNKNOWN-LOT_01.pdf`                            | COA                  | VitaNorth COA, unknown lot             |
+| `(proof)(BL6)(540837).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
+| `(proof)(BL6)(540841).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
+| `label_proof_BL5-b_530476.pdf`                                                | LABEL_PROOF          | Print proof from label vendor          |
 <!-- markdownlint-restore -->
 
 **Missing test coverage:** Quote documents. Add samples when available.
@@ -119,7 +122,7 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-004: Unit Tests
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-002, EPIC-003
 - **Business Objective:** Give the codebase a fast, offline test suite so
   schema changes and extraction logic can be validated without an API key or
@@ -148,16 +151,14 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-005: SKILL.md Integration
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-001, EPIC-002, EPIC-003, EPIC-004
-- **Business Objective:** Package the script as a Claude Code skill so the supply chain agent can invoke it naturally via `/doc-extractor <path>`.
+- **Business Objective:** Package the repo as an agent-agnostic skill so any AI agent (Claude Code, Gemini, OpenCode, etc.) can invoke `/doc-extractor <path>` to extract structured JSON from supply chain documents.
 - **Technical Boundary:**
-  - Create `.claude/skills/doc-extractor/SKILL.md` with frontmatter and agent instructions
-  - Move scripts into `.claude/skills/doc-extractor/scripts/`
-  - SKILL.md uses `${CLAUDE_SKILL_DIR}` to reference bundled scripts
-  - Instructions: check env var, run script, capture stdout, interpret exit codes
-  - `disable-model-invocation: true` — agent controls when to extract
-  - `allowed-tools: Bash(python *)`
+  - `SKILL.md` at repo root — minimal frontmatter (`name`, `description` only), no agent-specific flags
+  - References `${SKILL_DIR}/scripts/parse_vision.py` — agent-agnostic path variable
+  - Instructions: run script, capture stdout, interpret exit codes, format response
+  - The repo root IS the publishable skill — no nested packaging directory
 - **Verification Criteria (Definition of Done):**
   - `/doc-extractor test_docs/(spec_sheet)(Clean_L-Lysine)(ProTab)(Rev1).pdf` returns valid JSON in a Claude Code session
   - Exit code errors produce actionable agent messages
@@ -165,7 +166,7 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-006: Snapshot Eval Framework
 
-- **Status:** `Pending`
+- **Status:** `Active`
 - **Dependencies:** EPIC-004
 - **Business Objective:** Create a snapshot-based regression suite so any change to schemas, prompts, or models can be validated against known-good extractions. Also establish the intake pipeline so new documents can be added to the corpus and approved in one command. Foundation for future autoresearch integration (<https://github.com/karpathy/autoresearch>).
 - **Technical Boundary:**

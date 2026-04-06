@@ -140,17 +140,17 @@ Switching models is a one-line change since they all use the same SDK and API su
 
 ## 3. Skill Architecture
 
-### Claude Code Skill Format
+### Skill Format
 
-Based on the official skill documentation, the skill structure is:
+The repo root IS the publishable skill — agent-agnostic (Claude Code, Gemini, OpenCode, etc.):
 
 ```text
 doc-extractor/
 ├── SKILL.md              # Required — trigger logic + agent instructions
 ├── scripts/
 │   └── parse_vision.py   # The extraction engine
-└── schemas/
-    └── models.py         # Pydantic schema definitions (optional, can inline)
+└── scripts/
+    └── schemas.py        # Pydantic schema definitions
 ```
 
 ### SKILL.md Design
@@ -161,11 +161,12 @@ name: doc-extractor
 description: |
   Extract structured data from supply chain documents (PDFs, images of labels, COAs, invoices, spec sheets). Use when the agent needs to "read," "extract," "digitize," or "parse" a document file. Outputs strict JSON to stdout.
 disable-model-invocation: true
-allowed-tools: Bash(python *)
+allowed-tools:
+  - Bash(python *)
 ---
 ```
 
-`disable-model-invocation: true` — The autonomous supply chain agent should control when extraction happens, not Claude auto-triggering. The agent invokes it via `/doc-extractor <file_path>`.
+`disable-model-invocation: true` — The autonomous supply chain agent controls when extraction happens. The agent invokes it via `/doc-extractor <file_path>`.
 
 `allowed-tools: Bash(python *)` — The skill only needs to run the Python script.
 
@@ -174,18 +175,11 @@ allowed-tools: Bash(python *)
 The SKILL.md instructs the agent to:
 
 1. Verify `$GEMINI_DOC_EXTRACTOR_KEY` is set
-2. Run `python ${CLAUDE_SKILL_DIR}/scripts/parse_vision.py $ARGUMENTS`
+2. Run `python ${SKILL_DIR}/scripts/parse_vision.py $ARGUMENTS`
 3. Capture stdout (pure JSON)
 4. Interpret exit codes (0=success, 1=missing key, 2=bad file type, 3=API error)
 
-### Location Decision
-
-| Option | Path | Pros | Cons |
-|---|---|---|---|
-| Personal | `~/.claude/skills/doc-extractor/` | Available across all projects | Tied to one user |
-| Project | `.claude/skills/doc-extractor/` | Version controlled, shareable | Only this project |
-
-Recommendation: Start as a project skill (`.claude/skills/doc-extractor/`) so it's version-controlled and can be shared with the supply chain agent repo. Can be moved to personal later.
+`${SKILL_DIR}` is the agent-agnostic equivalent of `${CLAUDE_SKILL_DIR}` — resolved by whichever runtime loads the skill.
 
 ---
 
@@ -231,7 +225,7 @@ Each phase is small enough to complete in a single session.
 
 ## 5. Open Questions for User
 
-1. Skill location: Project-level (`.claude/skills/`) or personal (`~/.claude/skills/`)? I recommend project-level for version control.
+1. Skill location: The repo root is the skill — publish the repo directly. No nested packaging directory needed.
 2. Two-step vs single-step inference: The PRD implies one call that both classifies and extracts. An alternative is two calls (classify first, then extract with the right schema). Single call is cheaper but may be less accurate on edge cases.
 3. Schema strictness on Gemma 4: The 26B MoE model supports structured JSON, but the E4B (long-term target) is local-only and may need a different approach (e.g., Ollama + instructor library). Worth noting for future planning.
 

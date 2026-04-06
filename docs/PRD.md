@@ -25,7 +25,7 @@ Following the UNIX philosophy of "do one thing well," this skill performs zero b
 
 ### 3.2 Component Breakdown
 
-The skill resides in `.claude/skills/doc-extractor/` (project-level, version controlled) and consists of:
+The skill resides at the repo root (the repo IS the publishable skill, agnostic to agent runtime) and consists of:
 
 1. **`SKILL.md`** (Agent Instructions):
     - Defines the trigger logic: When the user or agent needs to "read," "extract," "digitize," or "parse" a document.
