@@ -13,3 +13,4 @@ wheels/
 test_docs/
 .ai/
 .DS_Store
+evals/snapshots/
