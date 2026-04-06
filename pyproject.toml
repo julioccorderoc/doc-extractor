@@ -1,0 +1,10 @@
+[project]
+name = "doc-extractor"
+version = "0.1.0"
+description = "Extract structured JSON from supply chain documents using Google Gemini/Gemma models"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "google-genai>=1.0.0",
+    "pydantic>=2.0.0",
+]
