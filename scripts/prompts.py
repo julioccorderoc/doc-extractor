@@ -54,6 +54,11 @@ _FIELD_RULES: dict[str, str] = {
         "extras[] — for any additional label spec lines not covered above. "
         "Do NOT include product_formula — packaging spec sheets describe packaging, not formulas."
     ),
+    "LABEL_ORDER_ACK": (
+        "date (YYYY-MM-DD), vendor_name (the label printer), acknowledgement_number (vendor's internal order/confirmation number), "
+        "po_number (buyer's PO number), delivery_date (YYYY-MM-DD), line_items[] (description, quantity [number], quantity_unit [e.g. 'label', 'roll'], "
+        "unit_price, total, label_size, substrate, inks), grand_total."
+    ),
     "LABEL_PROOF": (
         "date (YYYY-MM-DD), manufacturer_name (the printing company), brand, product_name, "
         "product_code, barcode, version (it always starts with FNSKU or REV), "
@@ -83,7 +88,7 @@ def build_classification_prompt() -> str:
     return """\
 Classify this supply chain document. Choose exactly one document_type:
   COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET, PACKAGING_SPEC_SHEET,
-  LABEL, LABEL_PROOF, PAYMENT_PROOF, UNKNOWN
+  LABEL, LABEL_PROOF, LABEL_ORDER_ACK, PAYMENT_PROOF, UNKNOWN
 
 Definitions:
 - COA: Certificate of Analysis (test results, lot numbers, pass/fail specifications)
@@ -93,6 +98,7 @@ Definitions:
 - PACKAGING_SPEC_SHEET: Packaging specification (bottle, label roll, carton specs — primary focus is packaging)
 - LABEL: Finished product label or label artwork (supplement facts panel, allergens, ingredients)
 - LABEL_PROOF: Print proof from a printer for client review (has technical print specs: substrate, ink colors, corner radius, wind position)
+- LABEL_ORDER_ACK: Label vendor order acknowledgement confirming quantities, pricing, and technical print specifications.
 - PAYMENT_PROOF: Bank payment confirmation or screenshot (payer, payee, amount, confirmation number)
 - UNKNOWN: Cannot classify or unreadable
 

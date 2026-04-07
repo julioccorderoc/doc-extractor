@@ -8,6 +8,7 @@ from schemas import (
     DocumentType,
     ExtractionResult,
     InvoicePayload,
+    LabelOrderAckPayload,
     LabelPayload,
     LabelProofPayload,
     PackagingSpecSheetPayload,
@@ -25,6 +26,7 @@ from schemas import (
 def test_coa_extraction_validates():
     # CoaExtraction uses strict=True so we validate from JSON (as in production via model_validate_json)
     import json
+
     data = {
         "header_data": {
             "testing_lab_name": "Acme Labs",
@@ -159,19 +161,24 @@ def test_packaging_spec_sheet_payload_validates():
             "filler": "16g rayon packing",
             "desiccant": "1g silica desiccant",
             "neck_band": "Clear perforated safety seal",
-            "label": "3\" x 8\" label, FNSKU X001234",
+            "label": '3" x 8" label, FNSKU X001234',
             "master_shipper": "12-count master carton",
             "inner_shipper": None,
-            "pallet": "48\" x 40\" standard wood pallet",
-            "extras": [{"component_name": "case_label", "description": "3\" x 4\" white Avery label"}],
+            "pallet": '48" x 40" standard wood pallet',
+            "extras": [
+                {
+                    "component_name": "case_label",
+                    "description": '3" x 4" white Avery label',
+                }
+            ],
         },
         "label_specs": {
-            "label_size": "3\" x 8\"",
+            "label_size": '3" x 8"',
             "barcode": "X001234",
-            "core_size": "3\" diameter",
-            "max_outer_diameter": "12\"",
+            "core_size": '3" diameter',
+            "max_outer_diameter": '12"',
             "wind_position": "left to right",
-            "extras": ["Pressure sensitive die cut, 1/8\" gap between labels"],
+            "extras": ['Pressure sensitive die cut, 1/8" gap between labels'],
         },
     }
     result = PackagingSpecSheetPayload.model_validate(data)
@@ -181,7 +188,7 @@ def test_packaging_spec_sheet_payload_validates():
     assert result.packaging_components.neck_band == "Clear perforated safety seal"
     assert len(result.packaging_components.extras) == 1
     assert result.packaging_components.extras[0].component_name == "case_label"
-    assert result.label_specs.label_size == "3\" x 8\""
+    assert result.label_specs.label_size == '3" x 8"'
     assert result.label_specs.wind_position == "left to right"
     assert len(result.label_specs.extras) == 1
 
@@ -254,19 +261,51 @@ def test_label_proof_payload_validates():
         "count": 60,
         "count_unit": "capsule",
         "servings": 60,
-        "label_size": "2.75\" x 7\"",
+        "label_size": '2.75" x 7"',
         "corner_radius": "0.125 in.",
         "substrate": "2M Metallized BOPP/S7000ER/1.2 Mil PET",
         "inks": "Cyan, Magenta, Yellow, Black, Premium White",
         "supplements_fact_panel": [
-            {"ingredient": "Loquat Leaf Extract", "amount_per_serving": "600 mg", "daily_value_percent": None}
+            {
+                "ingredient": "Loquat Leaf Extract",
+                "amount_per_serving": "600 mg",
+                "daily_value_percent": None,
+            }
         ],
     }
     result = LabelProofPayload.model_validate(data)
-    assert result.label_size == "2.75\" x 7\""
+    assert result.label_size == '2.75" x 7"'
     assert result.corner_radius == "0.125 in."
     assert result.substrate == "2M Metallized BOPP/S7000ER/1.2 Mil PET"
     assert len(result.supplements_fact_panel) == 1
+
+
+def test_label_order_ack_payload_validates():
+    data = {
+        "date": "2026-02-12",
+        "vendor_name": "Label Printer Inc",
+        "acknowledgement_number": "423747",
+        "po_number": "BL6",
+        "delivery_date": "2026-03-01",
+        "line_items": [
+            {
+                "description": "60ct 600mg Loquat Leaf Extract",
+                "quantity": 1320,
+                "quantity_unit": "cps.",
+                "unit_price": 0.228,
+                "total": 301.61,
+                "label_size": 'Rectangle 2.750" x 7.000"',
+                "substrate": "2.0 mil Metallized BOPP",
+                "inks": "CMYK+ Premium White",
+            }
+        ],
+        "grand_total": 703.56,
+    }
+    result = LabelOrderAckPayload.model_validate(data)
+    assert result.acknowledgement_number == "423747"
+    assert result.delivery_date == "2026-03-01"
+    assert len(result.line_items) == 1
+    assert result.line_items[0].substrate == "2.0 mil Metallized BOPP"
 
 
 # ---------------------------------------------------------------------------
@@ -276,14 +315,20 @@ def test_label_proof_payload_validates():
 
 def test_formula_component_amount_is_float():
     from schemas import FormulaComponent
-    fc = FormulaComponent.model_validate({"ingredient": "Vitamin C", "amount": 500, "unit": "mg"})
+
+    fc = FormulaComponent.model_validate(
+        {"ingredient": "Vitamin C", "amount": 500, "unit": "mg"}
+    )
     assert fc.amount == 500.0
     assert isinstance(fc.amount, float)
 
 
 def test_formula_component_coerces_string_amount():
     from schemas import FormulaComponent
-    fc = FormulaComponent.model_validate({"ingredient": "Vitamin C", "amount": "500", "unit": "mg"})
+
+    fc = FormulaComponent.model_validate(
+        {"ingredient": "Vitamin C", "amount": "500", "unit": "mg"}
+    )
     assert fc.amount == 500.0
 
 
@@ -296,23 +341,28 @@ def test_extraction_result_holds_coa_extraction():
     # In production, CoaExtraction is always instantiated via PAYLOAD_SCHEMA_MAP, never
     # through union dispatch. Test that ExtractionResult can hold a CoaExtraction payload.
     import json
-    coa = CoaExtraction.model_validate_json(json.dumps({
-        "header_data": {
-            "testing_lab_name": "Acme Labs",
-            "product_name": "Vitamin C",
-            "lot_number": "LOT001",
-        },
-        "test_results": [
+
+    coa = CoaExtraction.model_validate_json(
+        json.dumps(
             {
-                "test_category": "PHYSICAL",
-                "specific_analyte": "Moisture",
-                "specification_target": "NMT 5%",
-                "raw_result_text": "2.1%",
-                "result_operator": "=",
-                "lab_conclusion": "PASS",
+                "header_data": {
+                    "testing_lab_name": "Acme Labs",
+                    "product_name": "Vitamin C",
+                    "lot_number": "LOT001",
+                },
+                "test_results": [
+                    {
+                        "test_category": "PHYSICAL",
+                        "specific_analyte": "Moisture",
+                        "specification_target": "NMT 5%",
+                        "raw_result_text": "2.1%",
+                        "result_operator": "=",
+                        "lab_conclusion": "PASS",
+                    }
+                ],
             }
-        ],
-    }))
+        )
+    )
     result = ExtractionResult(
         document_type=DocumentType.COA,
         confidence=0.95,
@@ -372,7 +422,7 @@ def test_extraction_result_dispatches_label_proof():
         "extracted_date": "2026-04-06",
         "payload": {
             "product_name": "Loquat Leaf Extract",
-            "label_size": "2.75\" x 7\"",
+            "label_size": '2.75" x 7"',
             "corner_radius": "0.125 in.",
             "substrate": "2M Metallized BOPP",
             "inks": "CMYK + White",
@@ -380,7 +430,24 @@ def test_extraction_result_dispatches_label_proof():
     }
     result = ExtractionResult.model_validate(data)
     assert isinstance(result.payload, LabelProofPayload)
-    assert result.payload.label_size == "2.75\" x 7\""
+    assert result.payload.label_size == '2.75" x 7"'
+
+
+def test_extraction_result_dispatches_label_order_ack():
+    data = {
+        "document_type": "LABEL_ORDER_ACK",
+        "confidence": 1.0,
+        "extracted_date": "2026-04-06",
+        "payload": {
+            "vendor_name": "Label Printer Inc",
+            "acknowledgement_number": "423747",
+            "po_number": "BL6",
+            "line_items": [],
+        },
+    }
+    result = ExtractionResult.model_validate(data)
+    assert isinstance(result.payload, LabelOrderAckPayload)
+    assert result.payload.acknowledgement_number == "423747"
 
 
 # ---------------------------------------------------------------------------

@@ -46,8 +46,8 @@ that adds schema support must be tested against the relevant files.
 | `(proof)(BL6)(540837).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
 | `(proof)(BL6)(540841).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
 | `label_proof_BL5-b_530476.pdf`                                                | LABEL_PROOF          | Print proof from label vendor          |
-| `(order_acknowledgement)(423747)(BL6).pdf`                                   | LABEL_ORDER_ACK     | Label PO acknowledgement (BL6)        |
-| `(order_acknowledgement)(530476)(BL5-b).pdf`                                 | LABEL_ORDER_ACK     | Label PO acknowledgement (BL5-b)      |
+| `(order_acknowledgement)(423747)(BL6).pdf`                                    | LABEL_ORDER_ACK      | Label PO acknowledgement (BL6)         |
+| `(order_acknowledgement)(530476)(BL5-b).pdf`                                  | LABEL_ORDER_ACK      | Label PO acknowledgement (BL5-b)       |
 <!-- markdownlint-restore -->
 
 **Missing test coverage:** Quote documents. Add samples when available.
@@ -247,3 +247,36 @@ that adds schema support must be tested against the relevant files.
   - All four model snapshot dirs exist under `evals/snapshots/`
   - Comparison report generated and findings recorded
   - Recommended default model documented with rationale
+
+### EPIC-009: LABEL_ORDER_ACK Schema
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-002
+- **Business Objective:** Support label vendor order acknowledgements — documents
+  sent by the label printer to confirm they received and accepted a purchase order.
+  Distinct from `LABEL_PROOF` (artwork approval) and `INVOICE` (billing): these
+  confirm quantities, pricing, AND technical print specifications in a single document.
+- **Context:** Two test documents added to corpus: `(order_acknowledgement)(423747)(BL6).pdf`
+  and `(order_acknowledgement)(530476)(BL5-b).pdf`. Expected type `LABEL_ORDER_ACK`
+  is already in `test_docs/manifest.json`.
+- **Technical Boundary:**
+  - Add `LABEL_ORDER_ACK = "LABEL_ORDER_ACK"` to `DocumentType` enum
+  - Add `LabelOrderAckPayload` Pydantic model to `scripts/schemas/` with fields:
+    - `date` (YYYY-MM-DD)
+    - `vendor_name` — label printer name
+    - `acknowledgement_number` — vendor's internal confirmation/order number
+    - `po_number` — buyer's PO number being acknowledged
+    - `line_items[]` — each item has: `description`, `quantity` [number],
+      `quantity_unit` (e.g. 'label', 'roll'), `unit_price`, `total`,
+      plus technical specs: `label_size`, `substrate`, `inks`
+    - `grand_total`
+    - `delivery_date` (YYYY-MM-DD, optional)
+  - Add `LABEL_ORDER_ACK` entry to `PAYLOAD_SCHEMA_MAP`
+  - Add classification definition to `build_classification_prompt()`
+  - Add extraction rules to `_FIELD_RULES` in `prompts.py`
+  - Seed snapshots: `uv run python evals/snapshot.py approve --all`
+- **Verification Criteria (Definition of Done):**
+  - Both test documents classify as `LABEL_ORDER_ACK` with confidence ≥ 0.9
+  - `line_items` extract correctly with quantities and at least one technical spec
+  - `uv run pytest` passes with new schema tests
+  - Snapshots approved and `compare` passes

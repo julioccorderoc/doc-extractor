@@ -60,7 +60,7 @@ The script must *always* return an object matching this top-level schema. The st
 
 ```json
 {
-  "document_type": "string (ENUM: COA | INVOICE | QUOTE | SPEC_SHEET | LABEL | UNKNOWN)",
+  "document_type": "string (ENUM: COA | INVOICE | QUOTE | PRODUCT_SPEC_SHEET | PACKAGING_SPEC_SHEET | LABEL | LABEL_PROOF | LABEL_ORDER_ACK | PAYMENT_PROOF | UNKNOWN)",
   "confidence": "number (0.0 to 1.0)",
   "extracted_date": "ISO 8601 Timestamp",
   "payload": {
@@ -101,6 +101,13 @@ Defined as Pydantic v2 models in `scripts/schemas.py`. The models generate JSON 
   - company (name, address, email, phone, all)
   - suggested_use
   - marketing_text (like description)
+- **LABEL_ORDER_ACK:**
+  - date
+  - vendor_name
+  - acknowledgement_number
+  - po_number
+  - line_items (array of objects: [description, quantity, quantity_unit, unit_price, total, label_size, substrate, inks])
+  - grand_total
 - **PRODUCT_SPEC_SHEET:**
   - date
   - manufacturer_name

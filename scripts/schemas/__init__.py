@@ -5,13 +5,31 @@ These models generate JSON Schema via .model_json_schema() which is passed
 to the Gemini API's response_schema parameter.
 """
 
-from ._coa import CoaExtraction, CoaHeader, LabConclusion, ResultOperator, TestCategory, TestResult
+from ._coa import (
+    CoaExtraction,
+    CoaHeader,
+    LabConclusion,
+    ResultOperator,
+    TestCategory,
+    TestResult,
+)
 from ._enums import DocumentType
-from ._envelope import ClassificationResult, ExtractionResult, PAYLOAD_SCHEMA_MAP, PayloadUnion
+from ._envelope import (
+    ClassificationResult,
+    ExtractionResult,
+    PAYLOAD_SCHEMA_MAP,
+    PayloadUnion,
+)
 from ._invoice import InvoiceLineItem, InvoicePayload
 from ._label import LabelPayload
 from ._label_proof import LabelProofPayload
-from ._packaging_spec import ExtraPackagingComponent, LabelSpecs, PackagingComponents, PackagingSpecSheetPayload
+from ._label_order_ack import LabelOrderAckLineItem, LabelOrderAckPayload
+from ._packaging_spec import (
+    ExtraPackagingComponent,
+    LabelSpecs,
+    PackagingComponents,
+    PackagingSpecSheetPayload,
+)
 from ._payment_proof import PaymentProofPayload
 from ._product_spec import ProductSpecSheetPayload
 from ._quote import QuoteLineItem, QuotePayload
@@ -34,6 +52,9 @@ __all__ = [
     "LabelPayload",
     # Label proof
     "LabelProofPayload",
+    # Label order ack
+    "LabelOrderAckLineItem",
+    "LabelOrderAckPayload",
     # Packaging spec
     "ExtraPackagingComponent",
     "LabelSpecs",
