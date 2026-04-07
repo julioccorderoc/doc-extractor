@@ -41,15 +41,36 @@ def _snapshot_path(file_path: Path, snapshots_dir: Path) -> Path:
 
 def run_extraction(file_path: Path, model: str | None = None) -> dict:
     env = {**os.environ, "GEMINI_MODEL": model} if model else None
-    result = subprocess.run(
-        [sys.executable, str(PARSE_SCRIPT), str(file_path)],
-        capture_output=True, text=True, env=env,
-    )
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr)
-    if result.returncode != 0:
-        raise RuntimeError(f"Extraction failed (exit {result.returncode}) for: {file_path.name}")
-    return json.loads(result.stdout)
+    
+    import tempfile
+    
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".txt") as tmp:
+        tmp_path = tmp.name
+        
+    try:
+        # Step 1: Run liteparse
+        extract_text_script = PROJECT_ROOT / "scripts" / "extract_text.py"
+        subprocess.run(
+            [sys.executable, str(extract_text_script), str(file_path)],
+            stdout=open(tmp_path, "w"),
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        
+        # Step 2: Run parse_vision with text context
+        result = subprocess.run(
+            [sys.executable, str(PARSE_SCRIPT), str(file_path), "--text-context", tmp_path],
+            capture_output=True, text=True, env=env,
+        )
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        if result.returncode != 0:
+            raise RuntimeError(f"Extraction failed (exit {result.returncode}) for: {file_path.name}")
+        return json.loads(result.stdout)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 # ---------------------------------------------------------------------------
