@@ -9,14 +9,22 @@ from pydantic import BaseModel, Field
 
 class FormulaComponent(BaseModel):
     ingredient: str = Field(description="Ingredient name")
-    amount: Optional[float] = Field(default=None, description="Amount per serving as a number")
-    unit: Optional[str] = Field(default=None, description="Unit of measurement (e.g. 'mg', 'g', 'mcg', 'IU')")
+    amount: Optional[float] = Field(
+        default=None, description="Amount per serving as a number"
+    )
+    unit: Optional[str] = Field(
+        default=None, description="Unit of measurement (e.g. 'mg', 'g', 'mcg', 'IU')"
+    )
 
 
 class SupplementsFact(BaseModel):
     ingredient: Optional[str] = Field(default=None, description="Ingredient name")
-    amount_per_serving: Optional[str] = Field(default=None, description="Amount per serving with unit")
-    daily_value_percent: Optional[str] = Field(default=None, description="Percent daily value (%DV)")
+    amount_per_serving: Optional[str] = Field(
+        default=None, description="Amount per serving with unit"
+    )
+    daily_value_percent: Optional[str] = Field(
+        default=None, description="Percent daily value (%DV)"
+    )
 
 
 class CompanyInfo(BaseModel):
@@ -24,3 +32,30 @@ class CompanyInfo(BaseModel):
     address: Optional[str] = Field(default=None, description="Full address")
     email: Optional[str] = Field(default=None, description="Contact email")
     phone: Optional[str] = Field(default=None, description="Contact phone")
+
+
+class TechnicalLabelSpecs(BaseModel):
+    label_size: Optional[str] = Field(
+        default=None,
+        description="Label dimensions (e.g. '2.75\" x 7\"' or '70mm x 178mm')",
+    )
+    corner_radius: Optional[str] = Field(
+        default=None, description="Corner radius (e.g. '0.125 in.')"
+    )
+    substrate: Optional[str] = Field(
+        default=None,
+        description="Label material/substrate (e.g. '2M Metallized BOPP/S7000ER/1.2 Mil PET')",
+    )
+    inks: Optional[str] = Field(
+        default=None,
+        description="Ink colors used (e.g. 'Cyan, Magenta, Yellow, Black, Premium White')",
+    )
+    core_size: Optional[str] = Field(
+        default=None, description="Inner core diameter of the label roll"
+    )
+    max_outer_diameter: Optional[str] = Field(
+        default=None, description="Maximum outer diameter of the label roll"
+    )
+    wind_position: Optional[str] = Field(
+        default=None, description="Wind direction/position"
+    )
