@@ -285,7 +285,7 @@ that adds schema support must be tested against the relevant files.
 - **Status:** `Pending`
 - **Dependencies:** EPIC-002, EPIC-003
 - **Business Objective:** Eliminate numeric hallucinations and row skipping in dense tabular data (like COAs and Invoices) by augmenting the visual encoder with deterministic textual data.
-- **Context:** we're not egtting the desired accuracy. By executing `liteparse` locally before the API call, we can provide a deterministic Markdown representation of the table layout, bridging the vision-language gap.
+- **Context:** By executing `liteparse` locally before the API call, we can provide a deterministic Markdown representation of the table layout, bridging the vision-language gap.
 - **Technical Boundary:**
   - Add `liteparse` to `pyproject.toml` dependencies.
   - Create `scripts/extract_text.py` as a standalone tool that uses `liteparse` to parse a file and output text to `stdout`.
@@ -295,9 +295,26 @@ that adds schema support must be tested against the relevant files.
     - "Base structure and context on the visual document."
     - "Base exact spellings, numerical values, and lot numbers on the provided text extraction."
     - "If the provided text is garbled, irrelevant, or missing data, trust the image."
-  - Update `SKILL.md` to instruct the agent on composability: Step 1) Run `uv run python scripts/extract_text.py <file> > context.md`. Step 2) Run `uv run python scripts/parse_vision.py <file> --text-context context.md`.
+  - Update `SKILL.md` to instruct the agent on composability: Step 1. Run `uv run python scripts/extract_text.py <file> > context.md`. Step 2. Run `uv run python scripts/parse_vision.py <file> --text-context context.md`.
 - **Verification Criteria (Definition of Done):**
   - `scripts/extract_text.py` runs independently and prints parsed text.
   - `scripts/parse_vision.py` accepts and passes external text context to the LLM.
   - Snapshots run via `evals/snapshot.py approve --all` complete successfully.
   - `compare-models` running the new pipeline against the old baseline shows zero degraded fields on `COA` and `INVOICE` documents.
+
+### EPIC-011: Quantitative Eval Reporting & Advanced Fuzzy Math
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-006
+- **Business Objective:** Upgrade the cross-model evaluation report to provide objective, quantitative accuracy scores per document (e.g., "98% accuracy"), and eliminate false positives in the diffing logic using token-based fuzzy matching.
+- **Context:** The current `compare-models` report uses basic `difflib` string matching, which penalizes correct extractions if word order changes (e.g., "100 capsules" vs "100 count"). Furthermore, failing 3 fields on a 150-field COA is drastically different than failing 3 fields on a 5-field invoice; the report needs to calculate the denominator to provide an objective accuracy percentage.
+- **Technical Boundary:**
+  - Add `rapidfuzz` to `pyproject.toml` dependencies.
+  - In `evals/_diff.py`, replace `difflib.SequenceMatcher` with `rapidfuzz.fuzz.token_set_ratio` for the `lenient_diff` calculation (using an 85% threshold).
+  - Add a recursive `count_leaf_nodes(json_obj)` function to calculate `total_fields` for a given snapshot (excluding ignored fields like `extracted_date`).
+  - Restructure `evals/_report.py` to strictly separate diff types: Soft matches (`≈`) must NOT appear in the Hard Differences table.
+  - Inject the calculated accuracy score into the markdown headers of the generated report (e.g., `### COA_100X_Run-18.pdf — 96.5% Match (112/116 fields)`).
+- **Verification Criteria (Definition of Done):**
+  - String arrays with reordered words (e.g., `"Vitamin C 500mg"` vs `"500mg Vitamin C"`) evaluate as a Soft Match using `rapidfuzz`.
+  - The "Hard Differences" section of the generated markdown report exclusively contains genuine data mismatches (`✗`), completely devoid of case or fuzzy matches.
+  - Every document in the report displays its specific `(matches/total)` ratio and percentage.
