@@ -46,6 +46,8 @@ that adds schema support must be tested against the relevant files.
 | `(proof)(BL6)(540837).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
 | `(proof)(BL6)(540841).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
 | `label_proof_BL5-b_530476.pdf`                                                | LABEL_PROOF          | Print proof from label vendor          |
+| `(order_acknowledgement)(423747)(BL6).pdf`                                   | LABEL_ORDER_ACK     | Label PO acknowledgement (BL6)        |
+| `(order_acknowledgement)(530476)(BL5-b).pdf`                                 | LABEL_ORDER_ACK     | Label PO acknowledgement (BL5-b)      |
 <!-- markdownlint-restore -->
 
 **Missing test coverage:** Quote documents. Add samples when available.
@@ -166,36 +168,82 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-006: Snapshot Eval Framework
 
-- **Status:** `Active`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-004
 - **Business Objective:** Create a snapshot-based regression suite so any change to schemas, prompts, or models can be validated against known-good extractions. Also establish the intake pipeline so new documents can be added to the corpus and approved in one command. Foundation for future autoresearch integration (<https://github.com/karpathy/autoresearch>).
 - **Technical Boundary:**
-  - `evals/snapshot.py` — intake + comparison tool:
-    - `uv run python evals/snapshot.py approve <file>` — runs extraction, saves output to `evals/snapshots/<stem>.json`, marks it approved
-    - `uv run python evals/snapshot.py approve --all` — batch-approves all docs in `test_docs/` (used once to seed the corpus)
-    - `uv run python evals/snapshot.py compare` — re-runs all approved docs, diffs against snapshots, reports field-level pass/fail
+  - `evals/snapshot.py` — entry point (approve, compare, main); delegates to `_diff.py` and `_report.py`
+  - `evals/_diff.py` — diff primitives: `strict_diff()` for regression, `lenient_diff()` for cross-model (case-insensitive + similarity scoring via `difflib`)
+  - `evals/_report.py` — Markdown report builder for `compare-models`; writes to `evals/reports/`
+  - `evals/usage.md` — full usage reference
+  - Commands:
+    - `uv run python evals/snapshot.py approve <file>` — runs extraction, saves output to `evals/snapshots/<stem>.json`
+    - `uv run python evals/snapshot.py approve --all` — batch-approves all docs in `test_docs/`
+    - `uv run python evals/snapshot.py compare` — re-runs all approved docs, diffs against snapshots, field-level pass/fail
     - `uv run python evals/snapshot.py compare <file>` — single-doc diff
-  - `evals/snapshots/` — approved JSON outputs, committed to the repo (one file per test doc)
-  - `test_docs/manifest.json` — maps each filename to its expected `document_type`; used by `compare` to catch misclassifications without re-running the full diff
-  - Diff strategy: exact match on scalar fields, order-insensitive match on arrays (e.g. `test_results`, `line_items`), ignore `extracted_date` (changes every run)
+    - `uv run python evals/snapshot.py --model <name> approve --all` — seed model-specific snapshots under `evals/snapshots/<model>/`
+    - `uv run python evals/snapshot.py --model <name> compare` — regression check against model-specific snapshots
+    - `uv run python evals/snapshot.py compare-models <baseline> <candidate>` — structured cross-model comparison report (no re-extraction); report saved to `evals/reports/`
+  - `evals/snapshots/` — default snapshots (gemini-2.5-flash baseline)
+  - `evals/snapshots/<model>/` — per-model snapshot dirs when `--model` flag is used
+  - `evals/reports/` — generated Markdown reports from `compare-models`
+  - `test_docs/manifest.json` — maps filenames → expected `document_type`
+  - Diff strategy: exact match on scalars, order-insensitive match on arrays, ignore `extracted_date` and `confidence` (change every run)
+  - Cross-model diff: case-only differences → "soft match"; string similarity ≥ 75% → "soft match"; genuine value changes → "hard diff"
+  - API key routing: Gemini models use `GEMINI_DOC_EXTRACTOR_KEY`; Gemma models (model name starts with `gemma`) use `GEMMA_FREE_API`
 - **Verification Criteria (Definition of Done):**
-  - `uv run python evals/snapshot.py approve --all` seeds all 22 snapshots without errors
+  - `uv run python evals/snapshot.py approve --all` seeds all snapshots without errors
   - `uv run python evals/snapshot.py compare` passes with 0 regressions on the seeded snapshots
   - Adding a new doc, approving it, and running compare includes it in the suite automatically
   - `extracted_date` is excluded from diffs so comparisons don't flap
+  - `compare-models` produces a structured report with summary, per-doc diff sections, and matched list
 
-### EPIC-007: Gemma 4 Migration
+### EPIC-007: Gemma 4 Support
 
 - **Status:** `Pending`
-- **Dependencies:** EPIC-006 (need evals to compare quality)
-- **Business Objective:** Switch to a free model to eliminate per-token cost
-  while maintaining extraction quality.
+- **Dependencies:** EPIC-006
+- **Business Objective:** Enable Gemma 4 models as a free-tier alternative to
+  Gemini, eliminating per-token cost while maintaining extraction quality.
+- **Blocker (discovered during EPIC-006):** Gemma models reject
+  `response_mime_type="application/json"` + `response_schema` with HTTP 400
+  "invalid argument". This is a Gemini-only feature. Gemma requires a different
+  extraction path: prompt it to return JSON, parse the output text manually,
+  and validate against the Pydantic schema. Additionally, Gemma is only
+  available on free-tier API accounts — paid accounts receive HTTP 400.
+  A separate `GEMMA_FREE_API` env var is already wired up in `parse_vision.py`.
 - **Technical Boundary:**
-  - Switch model to `gemma-4-26b-a4b-it` via `GEMINI_MODEL` env var
-  - Run full eval suite, compare against Gemini Flash baseline
-  - Tune prompts if quality degrades
-  - Document quality delta in eval results
+  - Add a `_extract_gemma()` path in `parse_vision.py`:
+    - No `response_mime_type` or `response_schema` in `GenerateContentConfig`
+    - Append explicit JSON output instruction to the prompt
+    - Strip markdown code fences from response text before parsing
+    - Validate output with `ExtractionResult.model_validate_json()`
+  - Route to `_extract_gemma()` when `model.startswith("gemma")`; existing
+    `_extract_gemini()` path unchanged
+  - Run `compare-models` against Gemini Flash and Pro baselines
+  - Tune prompt if classification or field quality degrades
 - **Verification Criteria (Definition of Done):**
-  - Eval suite passes with Gemma 4 at ≥90% field accuracy vs Flash baseline
-  - No regressions on document classification
-  - Model switch is configurable via `GEMINI_MODEL` env var (no code changes needed)
+  - `uv run python evals/snapshot.py --model gemma-4-26b-a4b-it approve --all`
+    completes without errors
+  - `compare-models gemini-2.5-flash gemma-4-26b-a4b-it` shows ≥85% field match
+  - No misclassifications on document types present in the test corpus
+  - `GEMMA_FREE_API` is documented in `CLAUDE.md` and `SKILL.md`
+
+### EPIC-008: Multi-Model Quality Baseline
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-006, EPIC-007
+- **Business Objective:** Establish a quality benchmark across all four target
+  models so the best cost/quality tradeoff can be chosen for production.
+- **Models to benchmark:**
+  1. `gemini-2.5-pro-preview` — highest quality, most expensive (baseline)
+  2. `gemini-2.5-flash` — default, good quality, low cost
+  3. `gemma-4-26b-a4b-it` — free tier, large model
+- **Technical Boundary:**
+  - Seed snapshots for all four models (`--model` flag, one run each)
+  - Run `compare-models` for each model against the Pro baseline
+  - Document field-match % and misclassification count per model
+  - Record findings in `.ai/memory.md` as the permanent quality record
+- **Verification Criteria (Definition of Done):**
+  - All four model snapshot dirs exist under `evals/snapshots/`
+  - Comparison report generated and findings recorded
+  - Recommended default model documented with rationale

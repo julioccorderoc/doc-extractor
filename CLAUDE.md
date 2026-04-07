@@ -14,7 +14,20 @@ doc-extractor/                    # This directory IS the publishable skill
 │   └── roadmap.md                # Epic-based implementation plan (LIVE DOCUMENT)
 ├── scripts/
 │   ├── parse_vision.py           # Main extraction engine
-│   └── schemas.py                # Pydantic v2 models for all document types
+│   ├── prompts.py                # Extraction prompts and system instructions
+│   └── schemas/                  # Pydantic v2 models (one file per document type)
+│       ├── __init__.py           # Re-exports all public symbols
+│       ├── _enums.py             # DocumentType enum
+│       ├── _shared.py            # FormulaComponent, SupplementsFact, CompanyInfo
+│       ├── _coa.py               # CoaExtraction, CoaHeader, TestResult (+ enums)
+│       ├── _invoice.py           # InvoicePayload
+│       ├── _quote.py             # QuotePayload
+│       ├── _product_spec.py      # ProductSpecSheetPayload
+│       ├── _packaging_spec.py    # PackagingSpecSheetPayload
+│       ├── _label.py             # LabelPayload
+│       ├── _label_proof.py       # LabelProofPayload
+│       ├── _payment_proof.py     # PaymentProofPayload
+│       └── _envelope.py          # ExtractionResult, ClassificationResult, PAYLOAD_SCHEMA_MAP
 ├── evals/                        # Evaluation framework (EPIC-006)
 ├── tests/                        # Unit tests (pytest)
 ├── test_docs/                    # Real documents for testing (DO NOT commit to public repos)
@@ -27,10 +40,13 @@ doc-extractor/                    # This directory IS the publishable skill
 ## Key Commands
 
 ```bash
-# Run extraction on a document
+# Run extraction (two-pass: classify then extract)
 python scripts/parse_vision.py <absolute_file_path>
 
-# Run evals (after EPIC-006)
+# Run extraction with known type (skips classification pass)
+python scripts/parse_vision.py <absolute_file_path> --type <TYPE>
+
+# Run evals
 python evals/snapshot.py approve --all   # seed snapshots
 python evals/snapshot.py compare         # regression check
 ```
@@ -38,7 +54,7 @@ python evals/snapshot.py compare         # regression check
 ## Environment Variables
 
 - `GEMINI_DOC_EXTRACTOR_KEY` — Required. Google AI Studio API key.
-- `GEMINI_MODEL` — Optional. Override model (default: `gemini-3-flash-preview`).
+- `GEMINI_MODEL` — Optional. Override model (default: `gemini-2.5-flash`).
 
 ## Working Conventions
 
@@ -60,9 +76,10 @@ After every session or significant change:
 
 ### Schema Changes
 
-- Schemas are defined in `scripts/schemas.py` using Pydantic v2
+- Schemas live in `scripts/schemas/` — one file per document type
 - The PRD (`docs/PRD.md`) is the source of truth for field definitions
-- If you change a schema, update both `schemas.py` AND the PRD
+- If you change a schema, update both the relevant `schemas/_<type>.py` file AND the PRD
+- COA uses `CoaExtraction` (structured with `header_data` + `test_results[]`); all other types use flat `*Payload` models
 
 ### Testing
 

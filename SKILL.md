@@ -12,14 +12,19 @@ Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
 
 ## Arguments
 
-The file path follows the invocation: `/doc-extractor <path>`
+The invocation is: `/doc-extractor <path> [--type TYPE]`
 
-Capture `<path>` from the user's message. It may be absolute or relative to the project root.
+- `<path>` — required. Absolute or relative path to the document. It may be absolute or relative to the project root.
+- `--type TYPE` — optional. If you already know the document type from context, pass it here to skip the classification pass and save one API call. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `PAYMENT_PROOF`, `UNKNOWN`.
 
 ## Execution
 
 ```bash
+# Without type hint (two-pass: classify then extract)
 python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
+
+# With type hint (single pass: extract directly)
+python ${SKILL_DIR}/scripts/parse_vision.py "<path>" --type <TYPE>
 ```
 
 Capture both stdout (JSON result) and stderr (progress / error messages).
@@ -29,7 +34,7 @@ Capture both stdout (JSON result) and stderr (progress / error messages).
 | Exit code | Meaning | Action |
 |-----------|---------|--------|
 | `0` | Success | Parse stdout as JSON and present the extracted data. Summarize `document_type`, `confidence`, and key payload fields. |
-| `1` | Missing API key | Tell the user: "GEMINI_DOC_EXTRACTOR_KEY is not set. Get a key at https://aistudio.google.com/apikey and run: `export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'`" |
+| `1` | Missing API key | Tell the user: "GEMINI_DOC_EXTRACTOR_KEY is not set. Get a key at `https://aistudio.google.com/apikey` and run: `export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'`" |
 | `2` | Bad file or path | Show the stderr error message. Confirm the file exists and is a supported type (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`). |
 | `3` | API failure | Show the stderr error message. Suggest the user retry — transient errors (rate limits, server errors) resolve on their own. |
 

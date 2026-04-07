@@ -148,9 +148,9 @@ The repo root IS the publishable skill — agent-agnostic (Claude Code, Gemini, 
 doc-extractor/
 ├── SKILL.md              # Required — trigger logic + agent instructions
 ├── scripts/
-│   └── parse_vision.py   # The extraction engine
-└── scripts/
-    └── schemas.py        # Pydantic schema definitions
+│   ├── parse_vision.py   # The extraction engine
+│   ├── prompts.py        # Extraction prompts
+│   └── schemas.py        # Pydantic schema definitions
 ```
 
 ### SKILL.md Design

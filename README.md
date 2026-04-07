@@ -45,9 +45,9 @@ The agent verifies the file, runs the extraction, and instantly has access to th
 ## How It Works
 
 1. **Agent identifies intent** — Your AI agent sees you want to "read" or "extract" a document.
-2. **Agent invokes the CLI** — Runs `uv run python scripts/parse_vision.py <file_path>`.
-3. **The script connects to Gemini** — Uses `google-genai` and Gemini (e.g., `gemini-3-flash-preview`) to parse the file natively.
-4. **Enforces Schema** — The payload is strictly mapped to Pydantic v2 models depending on the identified document type.
+2. **Agent invokes the CLI** — Runs `uv run python scripts/parse_vision.py <file_path>`. If the agent already knows the document type, it can pass `--type TYPE` to skip pass 1.
+3. **Pass 1 — Classify** — A lightweight Gemini call returns only `document_type` + `confidence`. Skipped when `--type` is provided.
+4. **Pass 2 — Extract** — A second Gemini call uses the exact Pydantic schema for the identified type (no union ambiguity). Each call is focused and precise.
 5. **Agent reads output** — Pure JSON is sent to `stdout`. The agent ingests it and answers your question.
 
 ---
@@ -101,8 +101,10 @@ export GEMINI_DOC_EXTRACTOR_KEY="your-google-ai-studio-key"
 For agents or direct use:
 
 ```text
-uv run python scripts/parse_vision.py <absolute_file_path>
+uv run python scripts/parse_vision.py <absolute_file_path> [--type TYPE]
 ```
+
+`--type TYPE` skips the classification pass and goes straight to extraction. Useful when the caller already knows the document type. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `PAYMENT_PROOF`, `UNKNOWN`.
 
 **Exit codes:**
 
@@ -142,6 +144,24 @@ uv run python evals/snapshot.py compare
 
 ```bash
 uv run pytest
+```
+
+---
+
+## Model Choice
+
+The default model is **`gemini-2.5-flash`**. This was validated against `gemini-3.1-pro-preview` across 25 real supply chain documents (COAs, invoices, packaging specs, label proofs, payment records).
+
+Key findings:
+
+- **2.5 Flash wins** on COA test result completeness, deposit field recognition, packaging component extras, and spec sheet structured fields.
+- **3.1 Pro wins** on date disambiguation (doc date vs. revision date) and extracting complete marketing text blocks.
+- Overall, 2.5 Flash is more reliable and consistent across all document types, at significantly lower cost and latency.
+
+To switch models:
+
+```bash
+export GEMINI_MODEL="gemini-3.1-pro-preview"
 ```
 
 ---
