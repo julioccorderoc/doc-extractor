@@ -164,22 +164,14 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
 
 
 def main() -> None:
-    # Parse args: <file_path> [--type TYPE] [--text-context FILE]
+    # Parse args: <file_path> [--type TYPE] [--use-liteparse]
     args = sys.argv[1:]
     hint_type: DocumentType | None = None
-    text_context: str | None = None
+    use_liteparse: bool = False
 
-    if "--text-context" in args:
-        idx = args.index("--text-context")
-        if idx + 1 >= len(args):
-            print_err("Error: --text-context requires a file path.")
-            sys.exit(2)
-        tc_path = Path(args[idx + 1])
-        if not tc_path.exists():
-            print_err(f"Error: Text context file not found: {tc_path}")
-            sys.exit(2)
-        text_context = tc_path.read_text()
-        args = args[:idx] + args[idx + 2 :]
+    if "--use-liteparse" in args:
+        use_liteparse = True
+        args.remove("--use-liteparse")
 
     if "--type" in args:
         idx = args.index("--type")
@@ -197,20 +189,8 @@ def main() -> None:
 
     if len(args) != 1:
         print_err(
-            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE] [--text-context FILE]"
+            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE] [--use-liteparse]"
         )
-        sys.exit(2)
-        raw_type = args[idx + 1].upper()
-        try:
-            hint_type = DocumentType(raw_type)
-        except ValueError:
-            valid = ", ".join(t.value for t in DocumentType)
-            print_err(f"Error: Unknown document type '{raw_type}'. Valid: {valid}")
-            sys.exit(2)
-        args = args[:idx] + args[idx + 2 :]
-
-    if len(args) != 1:
-        print_err("Usage: python scripts/parse_vision.py <file_path> [--type TYPE]")
         sys.exit(2)
 
     # Determine model and API key
@@ -238,6 +218,23 @@ def main() -> None:
 
     file_path = validate_file(args[0])
     client = genai.Client(api_key=api_key)
+
+    # Extract text locally if requested
+    text_context: str | None = None
+    if use_liteparse:
+        try:
+            from liteparse import LiteParse
+            print_err("Extracting local text context via liteparse...")
+            lp = LiteParse()
+            lp_result = lp.parse(str(file_path))
+            if hasattr(lp_result, "text") and lp_result.text.strip():
+                text_context = lp_result.text
+            else:
+                print_err("Warning: liteparse returned empty text.")
+        except ImportError:
+            print_err("Warning: liteparse is not installed. Skipping local text extraction.")
+        except Exception as e:
+            print_err(f"Warning: liteparse extraction failed: {e}")
 
     uploaded_file = None
     try:
