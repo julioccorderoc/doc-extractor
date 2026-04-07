@@ -282,7 +282,7 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-010: Hybrid Extraction Pipeline (Liteparse + Gemini)
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-002, EPIC-003
 - **Business Objective:** Eliminate numeric hallucinations and row skipping in dense tabular data (like COAs and Invoices) by augmenting the visual encoder with deterministic textual data.
 - **Context:** By executing `liteparse` locally before the API call, we can provide a deterministic Markdown representation of the table layout, bridging the vision-language gap.

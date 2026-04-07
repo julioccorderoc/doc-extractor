@@ -1,6 +1,16 @@
 # Current Plan
 
-## Status: EPIC-011 Complete — EPIC-007 Up Next
+## Status: EPIC-010 Complete — EPIC-007 Up Next
+
+## What Was Done (2026-04-07, EPIC-010)
+
+- Implemented the Hybrid Extraction Pipeline by leveraging `liteparse`.
+- Added `liteparse` dependency to `pyproject.toml`.
+- Created `scripts/extract_text.py` as a standalone CLI to pre-process text locally.
+- Updated `scripts/parse_vision.py` to support `--text-context FILE` and pass it to Gemini via the `contents` payload.
+- Refined `build_extraction_prompt_for_type()` in `scripts/prompts.py` to accept the pre-processed text and resolve data conflicts (preferring local text for spellings and numbers).
+- Modified `SKILL.md` usage instructions to favor the hybrid pipeline execution.
+- Updated `evals/snapshot.py` to integrate the hybrid pipeline explicitly for snapshot generation.
 
 ## What Was Done (2026-04-06, EPIC-006)
 
@@ -50,6 +60,7 @@
 - `PackagingSpecSheetPayload` before `ProductSpecSheetPayload` in union — superset ordering
 - Retry strategy: `APIError.code` for status check; 400 is not retried (bad input, not transient)
 - Upload split from polling so `finally` cleanup always has a file ref
+- Pipeline now utilizes a dual LLM and Local NLP approach (`liteparse`) to minimize numeric hallucinations natively.
 
 ### Recent Changes
 - Moved `build_extraction_prompt()` from `parse_vision.py` to `scripts/prompts.py` for better decoupling and adherence to SOLID principles.
