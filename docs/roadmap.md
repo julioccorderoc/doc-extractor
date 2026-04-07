@@ -279,23 +279,22 @@ that adds schema support must be tested against the relevant files.
   - Both test documents classify as `LABEL_ORDER_ACK` with confidence ≥ 0.9
   - `line_items` extract correctly with quantities and at least one technical spec
   - `uv run pytest` passes with new schema tests
+
 ### EPIC-010: Hybrid Extraction Pipeline (Liteparse + Gemini)
 
 - **Status:** `Pending`
 - **Dependencies:** EPIC-002, EPIC-003
 - **Business Objective:** Eliminate numeric hallucinations and row skipping in dense tabular data (like COAs and Invoices) by augmenting Gemini's visual encoder with deterministic textual data.
-- **Context:** Gemini 2.5 Flash struggles to maintain spatial geometry when reading dense, misaligned tables natively. By executing `liteparse` locally before the API call, we can provide a deterministic Markdown representation of the table layout, bridging the vision-language gap.
+- **Context:** Gemini 2.5 Flash struggles to maintain spatial geometry when reading dense, misaligned tables natively. By providing a deterministic Markdown representation of the table layout alongside the image, we bridge the vision-language gap.
 - **Technical Boundary:**
-  - Introduce `liteparse` as an optional preprocessing step in `scripts/parse_vision.py`.
-  - Execute `liteparse` locally (via `subprocess` or native library invocation) on the target file.
-  - Evaluate the quality of the extraction (e.g., character count > 100). If it fails or extracts garbage (like a flat scanned image), silently skip and fallback to the current pure-vision path.
-  - If successful, append the `liteparse` Markdown string to the `contents` array sent to Gemini, alongside the `uploaded_file`.
+  - Add a `--text-context <file>` argument to `scripts/parse_vision.py` to decouple the OCR engine from the extraction engine.
+  - If `--text-context` is provided, append its contents to the `contents` array sent to Gemini, alongside the `uploaded_file`.
   - Inject explicit conflict resolution instructions into `build_extraction_prompt_for_type()`:
-    - Base structure and context on the visual document.
-    - Base exact spellings, numerical values, and lot numbers on the provided text extraction.
-    - If the provided text is garbled, fallback to the image.
+    - "Base structure and context on the visual document."
+    - "Base exact spellings, numerical values, and lot numbers on the provided text extraction."
+    - "If the provided text is garbled, irrelevant, or missing data, trust the image."
+  - Update `SKILL.md` to instruct the agent on composability: "If you have access to a parsing skill (like liteparse), run it first and pass its output to doc-extractor using `--text-context`".
 - **Verification Criteria (Definition of Done):**
-  - Extraction pipeline conditionally incorporates `liteparse` text when available and valid.
+  - Extraction pipeline accepts and passes external text context to the LLM.
   - Snapshots run via `evals/snapshot.py approve --all` complete successfully.
-  - `compare-models` running the new pipeline against the old baseline shows zero degraded fields on `COA` and `INVOICE` documents, and ideally fixes any known skipped rows/hallucinations in the test corpus.
-  - Clear documentation added on how the dual-anchor prompt architecture functions.
+  - `compare-models` running the new pipeline against the old baseline shows zero degraded fields on `COA` and `INVOICE` documents.
