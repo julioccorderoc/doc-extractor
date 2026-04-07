@@ -1,12 +1,21 @@
 """Document extraction engine using Google Gemini/Gemma models.
 
+Two-pass extraction:
+  Pass 1 — classify the document type (cheap, small schema)
+  Pass 2 — extract payload fields using the exact schema for that type
+
 Usage:
-    python scripts/parse_vision.py <absolute_file_path>
+    python scripts/parse_vision.py <absolute_file_path> [--type TYPE]
+
+    --type TYPE   Skip pass 1 and use the supplied document type directly.
+                  Useful when the caller already knows the document type.
+                  Valid values: COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET,
+                  PACKAGING_SPEC_SHEET, LABEL, LABEL_PROOF, PAYMENT_PROOF, UNKNOWN
 
 Exit codes:
     0 - Success (JSON printed to stdout)
     1 - Missing GEMINI_DOC_EXTRACTOR_KEY
-    2 - Bad file type or file not found
+    2 - Bad file type, file not found, or invalid --type value
     3 - API failure after retries
 """
 
@@ -22,105 +31,19 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai.types import GenerateContentConfig
 
-from schemas import ExtractionResult
+from prompts import build_classification_prompt, build_extraction_prompt_for_type
+from schemas import (
+    ClassificationResult,
+    DocumentType,
+    ExtractionResult,
+    PAYLOAD_SCHEMA_MAP,
+)
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 DEFAULT_MODEL = "gemini-2.5-flash"
 MAX_RETRIES = 3
 RETRYABLE_CODES = {429, 500, 503}
 UPLOAD_TIMEOUT_SECS = 300  # 5 minutes max for file processing
-
-
-def build_extraction_prompt() -> str:
-    """Build the extraction prompt with today's date injected to fix extracted_date accuracy."""
-    today = datetime.date.today().isoformat()
-    return f"""\
-You are a document data extractor for supply chain documents.
-Today's date is {today}.
-
-STEP 1 — CLASSIFY. Choose document_type from exactly one of:
-  COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET, PACKAGING_SPEC_SHEET,
-  LABEL, LABEL_PROOF, PAYMENT_PROOF, UNKNOWN
-
-STEP 2 — EXTRACT. Populate ONLY the payload fields for the classified document type.
-Set all other payload fields to null. Do not mix fields from different document types.
-
-STEP 3 — Set extracted_date to today's date: {today}
-This is the date of extraction, NOT the date printed on the document.
-
-FIELD RULES (all dates must be YYYY-MM-DD format):
-
-PAYMENT_PROOF — Screenshot or confirmation of a bank payment / transfer:
-  date, payer (sender name/account), payee (recipient name/account),
-  amount (number, no currency symbol), confirmation_number, payment_method (e.g. 'Zelle', 'ACH', 'Wire')
-
-COA — Certificate of Analysis:
-  date, manufacturer_name, product_name, lot_number, expiration_date,
-  test_results[] (extract every row: test_name, method, specification, result, pass_fail_status)
-
-INVOICE — Invoice or Sales Order:
-  date, vendor_name, invoice_number, po_number,
-  line_items[] (description, quantity [number], quantity_unit [e.g. 'bottle','label','kg'], unit_price, total),
-  grand_total
-  If this is a deposit/partial payment invoice:
-    deposit_number (integer, e.g. 1 for "Deposit 1"), deposit_percentage (fraction 0.0–1.0),
-    due_amount (remaining balance after this payment)
-  Sales orders should also be classified as INVOICE.
-
-QUOTE — Quote or RFQ:
-  date, vendor_name, quote_number,
-  line_items[] (description, quantity [number], quantity_unit, unit_price, total),
-  total
-
-PRODUCT_SPEC_SHEET — Product specification or formula sheet (no primary packaging focus):
-  date, manufacturer_name, product_name, product_code, product_description,
-  product_formula[] (ingredient, amount [number], unit [e.g. 'mg','g','mcg','IU']),
-  capsule_type (e.g. 'Size 00 Vegetable Capsule' — the delivery form, not an ingredient),
-  excipients[] (non-active ingredients listed without amounts, e.g. ['Magnesium Stearate']),
-  count [integer], count_unit [e.g. 'capsule','tablet','softgel'], servings [integer],
-  includes_packaging [true if the document also describes bottle/label/carton specs]
-
-PACKAGING_SPEC_SHEET — Packaging specification sheet (primary focus is packaging components):
-  date, manufacturer_name, product_name, product_code, product_description,
-  count [integer], count_unit, servings [integer],
-  packaging_components object with these normalized fields (set each to a string description or null):
-    container, closure, filler, desiccant, neck_band, label, master_shipper, inner_shipper, pallet
-    extras[] (component_name, description) — for anything not in the list above
-  label_specs object:
-    label_size, barcode, core_size, max_outer_diameter, wind_position
-    extras[] — for any additional label spec lines not covered above
-  Do NOT include product_formula — packaging spec sheets describe packaging, not formulas.
-
-LABEL_PROOF — Print proof document sent by the printer for client review before production:
-  Classify as LABEL_PROOF (not LABEL) when the document contains technical print specs
-  such as substrate, ink colors, corner radius, or is titled "proof" / "label proof".
-  date, manufacturer_name (the printing company), brand, product_name, product_code,
-  barcode, version,
-  count [integer], count_unit, servings [integer],
-  label_size, corner_radius, substrate, inks,
-  core_size, max_outer_diameter, wind_position,
-  supplements_fact_panel[] (ingredient, amount_per_serving, daily_value_percent),
-  other_ingredients, allergens, company (name, address, email, phone),
-  suggested_use, marketing_text
-
-LABEL — Finished product label or label artwork (no technical print specs):
-  brand, product_name, barcode, version,
-  count [integer], count_unit, servings [integer],
-  supplements_fact_panel[] (ingredient, amount_per_serving, daily_value_percent),
-  other_ingredients, allergens, company (name, address, email, phone),
-  suggested_use, marketing_text
-  If the label artwork has no readable text, return UNKNOWN instead.
-
-UNKNOWN — Unclassifiable or unreadable:
-  Set payload to null.
-  Populate raw_text_fallback with all readable text found in the document.
-
-GENERAL RULES:
-- Extract exactly what the document says. Do not infer or fabricate data.
-- If a field cannot be found, set it to null (or empty list for arrays).
-- All quantity/count/servings fields are numbers (integers or floats), never strings.
-- confidence: 1.0 = certain classification, 0.0 = total guess. Be honest.
-"""
 
 
 def print_err(msg: str) -> None:
@@ -151,7 +74,7 @@ def with_retry(fn, *args, **kwargs):
         except genai_errors.APIError as e:
             if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES - 1:
                 raise
-            wait = 2 ** attempt  # 1s, 2s, 4s
+            wait = 2**attempt  # 1s, 2s, 4s
             print_err(
                 f"API error {e.code}, retrying in {wait}s "
                 f"(attempt {attempt + 1}/{MAX_RETRIES})..."
@@ -165,7 +88,9 @@ def upload_file(client: genai.Client, file_path: Path) -> genai.types.File:
     return client.files.upload(file=str(file_path))
 
 
-def wait_for_processing(client: genai.Client, uploaded: genai.types.File) -> genai.types.File:
+def wait_for_processing(
+    client: genai.Client, uploaded: genai.types.File
+) -> genai.types.File:
     """Poll until the uploaded file finishes processing. Raises on failure or timeout."""
     deadline = time.monotonic() + UPLOAD_TIMEOUT_SECS
     while uploaded.state.name == "PROCESSING":
@@ -184,19 +109,39 @@ def wait_for_processing(client: genai.Client, uploaded: genai.types.File) -> gen
     return uploaded
 
 
-def extract(client: genai.Client, uploaded_file: genai.types.File, model: str) -> str:
-    """Run inference to classify and extract document data."""
-    print_err(f"Running extraction with model: {model}")
-
+def classify(
+    client: genai.Client, uploaded_file: genai.types.File, model: str
+) -> ClassificationResult:
+    """Pass 1: classify document type. Cheap call with a minimal response schema."""
+    print_err("Pass 1: classifying document...")
     response = client.models.generate_content(
         model=model,
-        contents=[build_extraction_prompt(), uploaded_file],
+        contents=[build_classification_prompt(), uploaded_file],
         config=GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=ExtractionResult,
+            response_schema=ClassificationResult,
         ),
     )
+    return ClassificationResult.model_validate_json(response.text)
 
+
+def extract_typed(
+    client: genai.Client,
+    uploaded_file: genai.types.File,
+    model: str,
+    doc_type: DocumentType,
+) -> str:
+    """Pass 2: extract payload using the exact schema for the classified type."""
+    print_err(f"Pass 2: extracting {doc_type.value} fields...")
+    payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
+    response = client.models.generate_content(
+        model=model,
+        contents=[build_extraction_prompt_for_type(doc_type), uploaded_file],
+        config=GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=payload_class,
+        ),
+    )
     return response.text
 
 
@@ -210,35 +155,86 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print_err("Usage: python scripts/parse_vision.py <file_path>")
+    # Parse args: <file_path> [--type TYPE]
+    args = sys.argv[1:]
+    hint_type: DocumentType | None = None
+
+    if "--type" in args:
+        idx = args.index("--type")
+        if idx + 1 >= len(args):
+            print_err("Error: --type requires a document type value.")
+            sys.exit(2)
+        raw_type = args[idx + 1].upper()
+        try:
+            hint_type = DocumentType(raw_type)
+        except ValueError:
+            valid = ", ".join(t.value for t in DocumentType)
+            print_err(f"Error: Unknown document type '{raw_type}'. Valid: {valid}")
+            sys.exit(2)
+        args = args[:idx] + args[idx + 2:]
+
+    if len(args) != 1:
+        print_err(
+            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE]"
+        )
         sys.exit(2)
 
-    # Validate API key
-    api_key = os.environ.get("GEMINI_DOC_EXTRACTOR_KEY")
-    if not api_key:
-        print_err(
-            "Error: GEMINI_DOC_EXTRACTOR_KEY is not set.\n"
-            "Get a key at https://aistudio.google.com/apikey and run:\n"
-            "  export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'"
-        )
-        sys.exit(1)
-
-    # Validate file
-    file_path = validate_file(sys.argv[1])
-
-    # Initialize client
-    client = genai.Client(api_key=api_key)
+    # Determine model and API key
     model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
+    is_gemma = model.lower().startswith("gemma")
+    if is_gemma:
+        api_key = os.environ.get("GEMMA_FREE_API")
+        if not api_key:
+            print_err(
+                f"Error: GEMMA_FREE_API is not set (required for Gemma models).\n"
+                f"Gemma models only work on free-tier accounts. Get a free key at\n"
+                f"https://aistudio.google.com/apikey and run:\n"
+                f"  export GEMMA_FREE_API='your-free-key-here'"
+            )
+            sys.exit(1)
+    else:
+        api_key = os.environ.get("GEMINI_DOC_EXTRACTOR_KEY")
+        if not api_key:
+            print_err(
+                "Error: GEMINI_DOC_EXTRACTOR_KEY is not set.\n"
+                "Get a key at https://aistudio.google.com/apikey and run:\n"
+                "  export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'"
+            )
+            sys.exit(1)
 
-    # Upload is split from processing so cleanup always runs once we have a file ref.
+    file_path = validate_file(args[0])
+    client = genai.Client(api_key=api_key)
+
     uploaded_file = None
     try:
         uploaded_file = with_retry(upload_file, client, file_path)
         uploaded_file = wait_for_processing(client, uploaded_file)
-        result_json = with_retry(extract, client, uploaded_file, model)
-        parsed = ExtractionResult.model_validate_json(result_json)
-        print(parsed.model_dump_json(indent=2))
+
+        # Pass 1 — classify (skip if caller supplied --type)
+        if hint_type is not None:
+            doc_type = hint_type
+            confidence = 1.0
+            print_err(f"Using caller-supplied type: {doc_type.value}")
+        else:
+            classification = with_retry(classify, client, uploaded_file, model)
+            doc_type = classification.document_type
+            confidence = classification.confidence
+            print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+
+        # Pass 2 — extract with the specific schema (skip for UNKNOWN)
+        payload = None
+        if doc_type in PAYLOAD_SCHEMA_MAP:
+            payload_json = with_retry(extract_typed, client, uploaded_file, model, doc_type)
+            payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
+
+        result = ExtractionResult(
+            document_type=doc_type,
+            confidence=confidence,
+            extracted_date=datetime.date.today().isoformat(),
+            payload=payload,
+        )
+        print(result.model_dump_json(indent=2))
+
     except genai_errors.APIError as e:
         print_err(
             f"Error: API failure after {MAX_RETRIES} retries "

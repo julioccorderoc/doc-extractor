@@ -51,13 +51,14 @@ def test_validate_file_accepts_allowed_extensions(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# build_extraction_prompt
+# build_extraction_prompt_for_type
 # ---------------------------------------------------------------------------
 
 
-def test_build_extraction_prompt_contains_today():
+def test_build_extraction_prompt_for_type_contains_today():
+    from schemas import DocumentType
     today = datetime.date.today().isoformat()
-    prompt = parse_vision.build_extraction_prompt()
+    prompt = parse_vision.build_extraction_prompt_for_type(DocumentType.COA)
     assert today in prompt
 
 
@@ -121,7 +122,7 @@ def test_main_cleanup_runs_on_extraction_failure(tmp_path, monkeypatch):
     def fake_with_retry(fn, *args, **kwargs):
         if fn is parse_vision.upload_file:
             return mock_uploaded
-        if fn is parse_vision.extract:
+        if fn is parse_vision.classify:
             raise _FakeAPIError(500)
         return fn(*args, **kwargs)
 

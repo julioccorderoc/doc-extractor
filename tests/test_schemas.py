@@ -1,10 +1,10 @@
-"""Unit tests for schemas.py — no API key or network access required."""
+"""Unit tests for schemas — no API key or network access required."""
 
 import pytest
 from pydantic import ValidationError
 
 from schemas import (
-    COAPayload,
+    CoaExtraction,
     DocumentType,
     ExtractionResult,
     InvoicePayload,
@@ -22,28 +22,37 @@ from schemas import (
 # ---------------------------------------------------------------------------
 
 
-def test_coa_payload_validates():
+def test_coa_extraction_validates():
+    # CoaExtraction uses strict=True so we validate from JSON (as in production via model_validate_json)
+    import json
     data = {
-        "date": "2026-01-15",
-        "manufacturer_name": "Acme Labs",
-        "product_name": "Vitamin C",
-        "lot_number": "LOT001",
-        "expiration_date": "2028-01-15",
+        "header_data": {
+            "testing_lab_name": "Acme Labs",
+            "product_name": "Vitamin C",
+            "lot_number": "LOT001",
+            "date_manufactured": "01/2026",
+            "date_expiration": "01/2028",
+        },
         "test_results": [
             {
-                "test_name": "Moisture Content",
-                "method": "USP <921>",
-                "specification": "≤5%",
-                "result": "2.1%",
-                "pass_fail_status": "Pass",
+                "test_category": "PHYSICAL",
+                "specific_analyte": "Moisture Content",
+                "test_method": "USP <921>",
+                "specification_target": "NMT 5%",
+                "raw_result_text": "2.1%",
+                "result_operator": "=",
+                "result_numeric": 2.1,
+                "result_uom": "%",
+                "lab_conclusion": "PASS",
             }
         ],
     }
-    result = COAPayload.model_validate(data)
-    assert result.product_name == "Vitamin C"
+    result = CoaExtraction.model_validate_json(json.dumps(data))
+    assert result.header_data.product_name == "Vitamin C"
+    assert result.header_data.lot_number == "LOT001"
     assert len(result.test_results) == 1
-    assert result.test_results[0].test_name == "Moisture Content"
-    assert result.test_results[0].pass_fail_status == "Pass"
+    assert result.test_results[0].specific_analyte == "Moisture Content"
+    assert result.test_results[0].lab_conclusion.value == "PASS"
 
 
 def test_invoice_payload_validates():
@@ -283,21 +292,35 @@ def test_formula_component_coerces_string_amount():
 # ---------------------------------------------------------------------------
 
 
-def test_extraction_result_dispatches_coa_payload():
-    data = {
-        "document_type": "COA",
-        "confidence": 0.95,
-        "extracted_date": "2026-04-06",
-        "payload": {
-            "manufacturer_name": "Acme Labs",
+def test_extraction_result_holds_coa_extraction():
+    # In production, CoaExtraction is always instantiated via PAYLOAD_SCHEMA_MAP, never
+    # through union dispatch. Test that ExtractionResult can hold a CoaExtraction payload.
+    import json
+    coa = CoaExtraction.model_validate_json(json.dumps({
+        "header_data": {
+            "testing_lab_name": "Acme Labs",
             "product_name": "Vitamin C",
-            "test_results": [
-                {"test_name": "Moisture", "result": "2.1%", "pass_fail_status": "Pass"}
-            ],
+            "lot_number": "LOT001",
         },
-    }
-    result = ExtractionResult.model_validate(data)
-    assert isinstance(result.payload, COAPayload)
+        "test_results": [
+            {
+                "test_category": "PHYSICAL",
+                "specific_analyte": "Moisture",
+                "specification_target": "NMT 5%",
+                "raw_result_text": "2.1%",
+                "result_operator": "=",
+                "lab_conclusion": "PASS",
+            }
+        ],
+    }))
+    result = ExtractionResult(
+        document_type=DocumentType.COA,
+        confidence=0.95,
+        extracted_date="2026-04-06",
+        payload=coa,
+    )
+    assert isinstance(result.payload, CoaExtraction)
+    assert result.payload.header_data.product_name == "Vitamin C"
 
 
 def test_extraction_result_dispatches_packaging_not_product():
