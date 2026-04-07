@@ -284,17 +284,20 @@ that adds schema support must be tested against the relevant files.
 
 - **Status:** `Pending`
 - **Dependencies:** EPIC-002, EPIC-003
-- **Business Objective:** Eliminate numeric hallucinations and row skipping in dense tabular data (like COAs and Invoices) by augmenting Gemini's visual encoder with deterministic textual data.
-- **Context:** Gemini 2.5 Flash struggles to maintain spatial geometry when reading dense, misaligned tables natively. By providing a deterministic Markdown representation of the table layout alongside the image, we bridge the vision-language gap.
+- **Business Objective:** Eliminate numeric hallucinations and row skipping in dense tabular data (like COAs and Invoices) by augmenting the visual encoder with deterministic textual data.
+- **Context:** we're not egtting the desired accuracy. By executing `liteparse` locally before the API call, we can provide a deterministic Markdown representation of the table layout, bridging the vision-language gap.
 - **Technical Boundary:**
-  - Add a `--text-context <file>` argument to `scripts/parse_vision.py` to decouple the OCR engine from the extraction engine.
+  - Add `liteparse` to `pyproject.toml` dependencies.
+  - Create `scripts/extract_text.py` as a standalone tool that uses `liteparse` to parse a file and output text to `stdout`.
+  - Add a `--text-context <file>` argument to `scripts/parse_vision.py` to accept the pre-processed OCR text.
   - If `--text-context` is provided, append its contents to the `contents` array sent to Gemini, alongside the `uploaded_file`.
   - Inject explicit conflict resolution instructions into `build_extraction_prompt_for_type()`:
     - "Base structure and context on the visual document."
     - "Base exact spellings, numerical values, and lot numbers on the provided text extraction."
     - "If the provided text is garbled, irrelevant, or missing data, trust the image."
-  - Update `SKILL.md` to instruct the agent on composability: "If you have access to a parsing skill (like liteparse), run it first and pass its output to doc-extractor using `--text-context`".
+  - Update `SKILL.md` to instruct the agent on composability: Step 1) Run `uv run python scripts/extract_text.py <file> > context.md`. Step 2) Run `uv run python scripts/parse_vision.py <file> --text-context context.md`.
 - **Verification Criteria (Definition of Done):**
-  - Extraction pipeline accepts and passes external text context to the LLM.
+  - `scripts/extract_text.py` runs independently and prints parsed text.
+  - `scripts/parse_vision.py` accepts and passes external text context to the LLM.
   - Snapshots run via `evals/snapshot.py approve --all` complete successfully.
   - `compare-models` running the new pipeline against the old baseline shows zero degraded fields on `COA` and `INVOICE` documents.
