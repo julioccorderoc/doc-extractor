@@ -168,12 +168,7 @@ export GEMINI_MODEL="gemini-3.1-pro-preview"
 
 ## Extending
 
-To add a new document type:
-
-1. Add a new payload model to `scripts/schemas.py` using Pydantic.
-2. Add the new model to the `PayloadUnion` at the bottom of the file.
-3. Update the parsing instructions in `scripts/parse_vision.py` under the `SYSTEM_INSTRUCTION` variable so the model knows what to look for.
-4. Run `uv run python evals/snapshot.py approve <test_file>` to save a golden snapshot for regressions.
+To add a new document type to the extractor, follow the strict architectural guidelines outlined in [docs/adding-new-document-type.md](docs/adding-new-document-type.md). The process involves creating a modular schema, wiring it into the two-pass extraction prompt, and validating it via the evaluation framework.
 
 ---
 
@@ -196,8 +191,9 @@ doc-extractor/
 ├── SKILL.md                 ← Skill entry point — agent-agnostic instructions
 ├── scripts/
 │   ├── parse_vision.py      ← Main extraction engine
-│   ├── schemas.py           ← Pydantic v2 models for all document types
-│   └── cleanup_files.py     ← Utility to prune temporary Google AI files
+│   ├── prompts.py           ← Extraction prompts and field instructions
+│   ├── cleanup_files.py     ← Utility to prune temporary Google AI files
+│   └── schemas/             ← Modular Pydantic v2 schemas per document type
 ├── evals/                   ← Snapshot-based regression testing suite
 ├── tests/                   ← Unit tests (pytest)
 └── test_docs/               ← Real documents for testing (Ignored in public repo)
