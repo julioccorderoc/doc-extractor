@@ -130,13 +130,22 @@ def extract_typed(
     uploaded_file: genai.types.File,
     model: str,
     doc_type: DocumentType,
+    text_context: str | None = None,
 ) -> str:
     """Pass 2: extract payload using the exact schema for the classified type."""
     print_err(f"Pass 2: extracting {doc_type.value} fields...")
     payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
+
+    contents = [
+        build_extraction_prompt_for_type(doc_type, has_text_context=bool(text_context)),
+        uploaded_file,
+    ]
+    if text_context:
+        contents.append(f"PRE-PROCESSED TEXT EXTRACTION:\n{text_context}")
+
     response = client.models.generate_content(
         model=model,
-        contents=[build_extraction_prompt_for_type(doc_type), uploaded_file],
+        contents=contents,
         config=GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=payload_class,
@@ -155,9 +164,22 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
 
 
 def main() -> None:
-    # Parse args: <file_path> [--type TYPE]
+    # Parse args: <file_path> [--type TYPE] [--text-context FILE]
     args = sys.argv[1:]
     hint_type: DocumentType | None = None
+    text_context: str | None = None
+
+    if "--text-context" in args:
+        idx = args.index("--text-context")
+        if idx + 1 >= len(args):
+            print_err("Error: --text-context requires a file path.")
+            sys.exit(2)
+        tc_path = Path(args[idx + 1])
+        if not tc_path.exists():
+            print_err(f"Error: Text context file not found: {tc_path}")
+            sys.exit(2)
+        text_context = tc_path.read_text()
+        args = args[:idx] + args[idx + 2 :]
 
     if "--type" in args:
         idx = args.index("--type")
@@ -171,12 +193,24 @@ def main() -> None:
             valid = ", ".join(t.value for t in DocumentType)
             print_err(f"Error: Unknown document type '{raw_type}'. Valid: {valid}")
             sys.exit(2)
-        args = args[:idx] + args[idx + 2:]
+        args = args[:idx] + args[idx + 2 :]
 
     if len(args) != 1:
         print_err(
-            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE]"
+            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE] [--text-context FILE]"
         )
+        sys.exit(2)
+        raw_type = args[idx + 1].upper()
+        try:
+            hint_type = DocumentType(raw_type)
+        except ValueError:
+            valid = ", ".join(t.value for t in DocumentType)
+            print_err(f"Error: Unknown document type '{raw_type}'. Valid: {valid}")
+            sys.exit(2)
+        args = args[:idx] + args[idx + 2 :]
+
+    if len(args) != 1:
+        print_err("Usage: python scripts/parse_vision.py <file_path> [--type TYPE]")
         sys.exit(2)
 
     # Determine model and API key
@@ -224,7 +258,9 @@ def main() -> None:
         # Pass 2 — extract with the specific schema (skip for UNKNOWN)
         payload = None
         if doc_type in PAYLOAD_SCHEMA_MAP:
-            payload_json = with_retry(extract_typed, client, uploaded_file, model, doc_type)
+            payload_json = with_retry(
+                extract_typed, client, uploaded_file, model, doc_type, text_context
+            )
             payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
 
         result = ExtractionResult(

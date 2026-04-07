@@ -111,16 +111,28 @@ Set confidence: 1.0 = certain, 0.0 = total guess.
 # ---------------------------------------------------------------------------
 
 
-def build_extraction_prompt_for_type(doc_type: DocumentType) -> str:
+def build_extraction_prompt_for_type(
+    doc_type: DocumentType, has_text_context: bool = False
+) -> str:
     """Focused extraction prompt for a single document type. No classification step."""
     today = datetime.date.today().isoformat()
     rules = _FIELD_RULES[doc_type.value]
+
+    conflict_resolution = ""
+    if has_text_context:
+        conflict_resolution = """
+CONFLICT RESOLUTION:
+- Base structure and context on the visual document.
+- Base exact spellings, numerical values, and lot numbers on the provided text extraction.
+- If the provided text is garbled, irrelevant, or missing data, trust the image.
+"""
+
     return f"""\
 You are a document data extractor for supply chain documents.
 Today's date is {today}.
 
 This document has been classified as {doc_type.value}. Extract ONLY the fields defined below.
-
+{conflict_resolution}
 FIELD RULES:
 {rules}
 
