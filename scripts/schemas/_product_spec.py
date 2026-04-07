@@ -10,11 +10,26 @@ from ._shared import FormulaComponent
 
 
 class ProductSpecSheetPayload(BaseModel):
-    date: Optional[str] = Field(default=None, description="Document date in YYYY-MM-DD format")
-    manufacturer_name: Optional[str] = Field(default=None, description="Manufacturer or company name")
+    date: Optional[str] = Field(
+        default=None, description="Document date in YYYY-MM-DD format"
+    )
+    version: Optional[str] = Field(
+        default=None,
+        description="Document version or revision number (e.g. 'Rev 1', 'v2')",
+    )
+    manufacturer_name: Optional[str] = Field(
+        default=None, description="Manufacturer or company name"
+    )
     product_name: Optional[str] = Field(default=None, description="Product name")
-    product_code: Optional[str] = Field(default=None, description="Product code or SKU")
-    product_description: Optional[str] = Field(default=None, description="Product description")
+    vendor_product_id: Optional[str] = Field(
+        default=None, description="Product code or SKU used by the vendor/manufacturer"
+    )
+    buyer_product_id: Optional[str] = Field(
+        default=None, description="Product code or SKU used by the buyer"
+    )
+    product_description: Optional[str] = Field(
+        default=None, description="Product description"
+    )
     product_formula: list[FormulaComponent] = Field(
         default_factory=list,
         description="Active ingredients with their amounts and units",
@@ -27,12 +42,16 @@ class ProductSpecSheetPayload(BaseModel):
         default_factory=list,
         description="Non-active ingredients listed without amounts (e.g. ['Magnesium Stearate', 'Silicon Dioxide'])",
     )
-    count: Optional[int] = Field(default=None, description="Number of units per container")
+    count: Optional[int] = Field(
+        default=None, description="Number of units per container"
+    )
     count_unit: Optional[str] = Field(
         default=None,
         description="Unit type for count (e.g. 'capsule', 'tablet', 'softgel', 'gummy')",
     )
-    servings: Optional[int] = Field(default=None, description="Number of servings per container")
+    servings: Optional[int] = Field(
+        default=None, description="Number of servings per container"
+    )
     includes_packaging: bool = Field(
         default=False,
         description="True if this document also specifies packaging components (bottle, label, etc.)",

@@ -20,20 +20,31 @@ from ._envelope import (
     PAYLOAD_SCHEMA_MAP,
     PayloadUnion,
 )
+from ._generic import (
+    GenericKeyValuePair,
+    GenericPayload,
+    GenericTable,
+    GenericTableRow,
+)
 from ._invoice import InvoiceLineItem, InvoicePayload
 from ._label import LabelPayload
 from ._label_proof import LabelProofPayload
 from ._label_order_ack import LabelOrderAckLineItem, LabelOrderAckPayload
 from ._packaging_spec import (
     ExtraPackagingComponent,
-    LabelSpecs,
     PackagingComponents,
     PackagingSpecSheetPayload,
 )
 from ._payment_proof import PaymentProofPayload
 from ._product_spec import ProductSpecSheetPayload
-from ._quote import QuoteLineItem, QuotePayload
-from ._shared import CompanyInfo, FormulaComponent, SupplementsFact
+from ._quote import (
+    AdditionalFee,
+    PricingTier,
+    QuotePayload,
+    QuotedItem,
+    QuoteTechnicalDetail,
+)
+from ._shared import CompanyInfo, FormulaComponent, SupplementsFact, TechnicalLabelSpecs
 
 __all__ = [
     # Enums
@@ -57,7 +68,6 @@ __all__ = [
     "LabelOrderAckPayload",
     # Packaging spec
     "ExtraPackagingComponent",
-    "LabelSpecs",
     "PackagingComponents",
     "PackagingSpecSheetPayload",
     # Payment proof
@@ -65,12 +75,21 @@ __all__ = [
     # Product spec
     "ProductSpecSheetPayload",
     # Quote
-    "QuoteLineItem",
+    "AdditionalFee",
+    "PricingTier",
     "QuotePayload",
+    "QuotedItem",
+    "QuoteTechnicalDetail",
     # Shared
     "CompanyInfo",
     "FormulaComponent",
     "SupplementsFact",
+    "TechnicalLabelSpecs",
+    # Generic
+    "GenericKeyValuePair",
+    "GenericPayload",
+    "GenericTable",
+    "GenericTableRow",
     # Envelope
     "ClassificationResult",
     "ExtractionResult",

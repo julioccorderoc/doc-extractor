@@ -224,6 +224,7 @@ def main() -> None:
     if use_liteparse:
         try:
             from liteparse import LiteParse
+
             print_err("Extracting local text context via liteparse...")
             lp = LiteParse()
             lp_result = lp.parse(str(file_path))
@@ -232,7 +233,9 @@ def main() -> None:
             else:
                 print_err("Warning: liteparse returned empty text.")
         except ImportError:
-            print_err("Warning: liteparse is not installed. Skipping local text extraction.")
+            print_err(
+                "Warning: liteparse is not installed. Skipping local text extraction."
+            )
         except Exception as e:
             print_err(f"Warning: liteparse extraction failed: {e}")
 
@@ -252,7 +255,7 @@ def main() -> None:
             confidence = classification.confidence
             print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
 
-        # Pass 2 — extract with the specific schema (skip for UNKNOWN)
+        # Pass 2 — extract with the specific schema
         payload = None
         if doc_type in PAYLOAD_SCHEMA_MAP:
             payload_json = with_retry(

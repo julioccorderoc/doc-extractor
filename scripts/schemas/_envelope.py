@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ._coa import CoaExtraction
 from ._enums import DocumentType
+from ._generic import GenericPayload
 from ._invoice import InvoicePayload
 from ._label import LabelPayload
 from ._label_proof import LabelProofPayload
@@ -27,6 +28,7 @@ PayloadUnion = Union[
     LabelProofPayload,
     LabelOrderAckPayload,
     LabelPayload,
+    GenericPayload,
 ]
 
 
@@ -46,7 +48,7 @@ class ExtractionResult(BaseModel):
     )
     raw_text_fallback: Optional[str] = Field(
         default=None,
-        description="Raw text extraction used when structured extraction fails or document_type is UNKNOWN",
+        description="Raw text extraction used when structured extraction fails",
     )
 
 
@@ -60,7 +62,6 @@ class ClassificationResult(BaseModel):
 
 
 # Mapping from document type to its payload schema (pass 2 routing).
-# UNKNOWN is intentionally omitted — no structured payload.
 PAYLOAD_SCHEMA_MAP: dict[DocumentType, type[BaseModel]] = {
     DocumentType.PAYMENT_PROOF: PaymentProofPayload,
     DocumentType.COA: CoaExtraction,
@@ -71,4 +72,5 @@ PAYLOAD_SCHEMA_MAP: dict[DocumentType, type[BaseModel]] = {
     DocumentType.LABEL_PROOF: LabelProofPayload,
     DocumentType.LABEL_ORDER_ACK: LabelOrderAckPayload,
     DocumentType.LABEL: LabelPayload,
+    DocumentType.UNKNOWN: GenericPayload,
 }

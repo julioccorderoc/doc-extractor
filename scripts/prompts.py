@@ -75,6 +75,11 @@ _FIELD_RULES: dict[str, str] = {
         "suggested_use, marketing_text. "
         "If the label artwork has no readable text, the document should have been classified as UNKNOWN."
     ),
+    "UNKNOWN": (
+        "title, summary (1-2 sentences), date (YYYY-MM-DD), sender_or_vendor (name, address, email, phone), "
+        "key_value_pairs[] (key, value) — extract all scalar data fields, "
+        "tables[] (title, columns, rows) — extract any tabular data found in the document."
+    ),
 }
 
 

@@ -72,66 +72,22 @@ The script must *always* return an object matching this top-level schema. The st
 
 ### 4.1 Required Sub-Schemas (The payload object)
 
-Defined as Pydantic v2 models in `scripts/schemas.py`. The models generate JSON Schema via `.model_json_schema()` which is passed to the API's `response_json_schema` parameter to enforce strict adherence.
+Defined as Pydantic v2 models in `scripts/schemas/`. The models themselves are the single source of truth for the JSON Schema returned by the API via `.model_json_schema()`.
 
-- **COA** (Certificate of Analysis):
-  - date
-  - manufacturer_name
-  - product_name
-  - lot_number
-  - expiration_date
-  - test_results (array of objects: [test_name, method, specification, result, pass_fail_status])
-- **INVOICE:**
-  - date
-  - vendor_name
-  - invoice_number
-  - po_number
-  - line_items (array of objects: [description, quantity, unit_price, total])
-  - grand_total
-- **LABEL:**
-  - brand
-  - product_name
-  - barcode
-  - version
-  - count (capsules, gummies, pellets, etc...)
-  - servings
-  - supplements_fact_panel (array of objects: [ingredient, amount_per_serving, %DV])
-  - other_ingredients
-  - allergens
-  - company (name, address, email, phone, all)
-  - suggested_use
-  - marketing_text (like description)
-- **LABEL_ORDER_ACK:**
-  - date
-  - vendor_name
-  - acknowledgement_number
-  - po_number
-  - line_items (array of objects: [description, quantity, quantity_unit, unit_price, total, label_size, substrate, inks])
-  - grand_total
-- **PRODUCT_SPEC_SHEET:**
-  - date
-  - manufacturer_name
-  - product_name
-  - product_code
-  - product_description
-  - product_formula (array of objects)
-  - count (capsules, gummies, pellets, etc...)
-  - servings
-- **PACKAGING_SPEC_SHEET:**
-  - date
-  - manufacturer_name
-  - product_name
-  - product_code
-  - product_description
-  - product_formula (array of objects)
-  - packaging_components (array of objects)
-  - label_specs (array of objects)
-  - closure_specs (array of objects)
-  - bottle_specs (array of objects)
-  - carton_specs (array of objects)
-  - pallet_specs (array of objects)
+The following top-level payload models are defined:
 
-All the dates must be in the `YYYY-MM-DD` format.
+- **COA** (`CoaExtraction`)
+- **INVOICE** (`InvoicePayload`)
+- **QUOTE** (`QuotePayload`)
+- **LABEL** (`LabelPayload`)
+- **LABEL_ORDER_ACK** (`LabelOrderAckPayload`)
+- **LABEL_PROOF** (`LabelProofPayload`)
+- **PRODUCT_SPEC_SHEET** (`ProductSpecSheetPayload`)
+- **PACKAGING_SPEC_SHEET** (`PackagingSpecSheetPayload`)
+- **PAYMENT_PROOF** (`PaymentProofPayload`)
+- **UNKNOWN** (`GenericPayload` - dynamic key/value and table extraction for unsupported formats)
+
+All extracted dates must be in the `YYYY-MM-DD` format.
 
 ## 5. Error Handling & Edge Cases
 

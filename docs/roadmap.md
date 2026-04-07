@@ -15,42 +15,9 @@
 
 ## Test Document Inventory
 
-The following files in `test_docs/` serve as our evaluation corpus. Each Epic
-that adds schema support must be tested against the relevant files.
+The `test_docs/` folder contains a comprehensive test corpus of PDFs and images covering all supported supply chain document types. Each Epic that adds or modifies schema support must be tested against these files.
 
-<!-- markdownlint-disable MD013 -->
-| File                                                                          | Expected Type        | Notes                                  |
-| ----------------------------------------------------------------------------- | -------------------- | -------------------------------------- |
-| `$30,675.00 Monolaurin 600mg Run 13 Deposit 1 Invoice 17095.pdf`              | INVOICE              | Manufacturer invoice                   |
-| `$30,806.62 Lysine + Monolaurin Run 11 PO19 Deposit 2 21 Mar 2024.pdf`        | INVOICE              | Manufacturer invoice                   |
-| `(Sales_Order)(PO_PT04)(SO#0007812)(Immune_Support)(Protab).pdf`              | INVOICE              | Sales order (treat as invoice variant) |
-| `(Sales_Order)(PO_PT08)(SO#0007859)(L-Lysine_Monolaurin)(Protab).pdf`         | INVOICE              | Sales order (treat as invoice variant) |
-| `(first_payment)(BN3).png`                                                    | PAYMENT_PROOF        | Bank payment screenshot                |
-| `(first_payment)(NS38)(NutraStar)($33,059.57).png`                            | PAYMENT_PROOF        | Bank payment screenshot                |
-| `(packaging_spec_sheet)(3001)(Monolaurin_800mg)(NCL)(Protab)(Signed)(v0).pdf` | PACKAGING_SPEC_SHEET | Signed packaging spec                  |
-| `(packaging_spec_sheet)(4001)(Clean_L-Lysine)(NCL)(Protab)(Signed)(v1).pdf`   | PACKAGING_SPEC_SHEET | Signed packaging spec                  |
-| `(packaging_spec_sheet)(PH4001)(Clean_L-Lysine)(PH)(Protab)(Signed)(v1).pdf`  | PACKAGING_SPEC_SHEET | Different brand (PH)                   |
-| `(spec_sheet)(Clean_L-Lysine)(ProTab)(Rev1).pdf`                              | PRODUCT_SPEC_SHEET   | Product specification                  |
-| `(spec_sheet)(Immune_Support)(Protab).pdf`                                    | PRODUCT_SPEC_SHEET   | Product specification                  |
-| `Artwork_200X_NCL_REV-3.pdf`                                                  | LABEL                | Product label artwork                  |
-| `Artwork_400X_NCL_FNSKU-V3.pdf`                                               | LABEL                | Product label artwork                  |
-| `Artwork_400X_NCL_FNSKU-V4.pdf`                                               | LABEL                | Product label artwork                  |
-| `Artwork_400X_NCL_FNSKU-V5.pdf`                                               | LABEL                | Product label artwork                  |
-| `Artwork_400X_PH_FNSKU-V5.pdf`                                                | LABEL                | Different brand (PH)                   |
-| `Artwork_900X_NCL_FNSKU-V2.pdf`                                               | LABEL                | Large label artwork                    |
-| `Artwork_900X_NCL_FNSKU-V3.pdf`                                               | LABEL                | Large label artwork                    |
-| `COA_100X_Run-18_NutraStar_NS32_2025-25535_2025-02_NutraStar.pdf`             | COA                  | NutraStar COA                          |
-| `COA_100X_Run-19_Gemini_G4_69600_2025-09-25_Gemini.pdf`                       | COA                  | Gemini COA                             |
-| `COA_600X_Run-06_BestNutra_BN2_0125054_2025-04.pdf`                           | COA                  | BestNutra COA                          |
-| `COA_600X_Run-07_VitaNorth_VN1_UNKNOWN-LOT_01.pdf`                            | COA                  | VitaNorth COA, unknown lot             |
-| `(proof)(BL6)(540837).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
-| `(proof)(BL6)(540841).pdf`                                                    | LABEL_PROOF          | Print proof from label vendor          |
-| `label_proof_BL5-b_530476.pdf`                                                | LABEL_PROOF          | Print proof from label vendor          |
-| `(order_acknowledgement)(423747)(BL6).pdf`                                    | LABEL_ORDER_ACK      | Label PO acknowledgement (BL6)         |
-| `(order_acknowledgement)(530476)(BL5-b).pdf`                                  | LABEL_ORDER_ACK      | Label PO acknowledgement (BL5-b)       |
-<!-- markdownlint-restore -->
-
-**Missing test coverage:** Quote documents. Add samples when available.
+*Note: The explicit document list has been removed to reduce maintenance overhead. The test runner dynamically discovers all valid files in the `test_docs/` directory.*
 
 ## Epic Ledger
 
@@ -232,8 +199,7 @@ that adds schema support must be tested against the relevant files.
 
 - **Status:** `Pending`
 - **Dependencies:** EPIC-006, EPIC-007
-- **Business Objective:** Establish a quality benchmark across all four target
-  models so the best cost/quality tradeoff can be chosen for production.
+- **Business Objective:** Establish a quality benchmark across all four target models so the best cost/quality tradeoff can be chosen for production.
 - **Models to benchmark:**
   1. `gemini-2.5-pro-preview` — highest quality, most expensive (baseline)
   2. `gemini-2.5-flash` — default, good quality, low cost

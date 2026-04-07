@@ -137,6 +137,14 @@ class CoaHeader(BaseModel):
         ...,
         description="The full name of the dietary supplement product.",
     )
+    vendor_product_id: Optional[str] = Field(
+        None,
+        description="The internal ID, formula number, or SKU of the item for the testing lab or manufacturer.",
+    )
+    buyer_product_id: Optional[str] = Field(
+        None,
+        description="The ID or SKU of the item from the customer's/buyer's perspective.",
+    )
     lot_number: str = Field(
         ...,
         description=(
