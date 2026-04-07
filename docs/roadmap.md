@@ -304,7 +304,7 @@ that adds schema support must be tested against the relevant files.
 
 ### EPIC-011: Quantitative Eval Reporting & Advanced Fuzzy Math
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-006
 - **Business Objective:** Upgrade the cross-model evaluation report to provide objective, quantitative accuracy scores per document (e.g., "98% accuracy"), and eliminate false positives in the diffing logic using token-based fuzzy matching.
 - **Context:** The current `compare-models` report uses basic `difflib` string matching, which penalizes correct extractions if word order changes (e.g., "100 capsules" vs "100 count"). Furthermore, failing 3 fields on a 150-field COA is drastically different than failing 3 fields on a 5-field invoice; the report needs to calculate the denominator to provide an objective accuracy percentage.
