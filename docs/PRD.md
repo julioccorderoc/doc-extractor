@@ -77,6 +77,7 @@ Defined as Pydantic v2 models in `scripts/schemas/`. The models themselves are t
 The following top-level payload models are defined:
 
 - **COA** (`CoaExtraction`)
+- **COA_RAW** (`CoaRawExtraction` - To be defined)
 - **INVOICE** (`InvoicePayload`)
 - **QUOTE** (`QuotePayload`)
 - **LABEL** (`LabelPayload`)

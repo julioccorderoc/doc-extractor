@@ -284,3 +284,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
   - String arrays with reordered words (e.g., `"Vitamin C 500mg"` vs `"500mg Vitamin C"`) evaluate as a Soft Match using `rapidfuzz`.
   - The "Hard Differences" section of the generated markdown report exclusively contains genuine data mismatches (`✗`), completely devoid of case or fuzzy matches.
   - Every document in the report displays its specific `(matches/total)` ratio and percentage.
+
+## Minor Backlog
+
+- [ ] Add `COA_RAW` document type and schema parsing based on PRD
