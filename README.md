@@ -101,8 +101,10 @@ export GEMINI_DOC_EXTRACTOR_KEY="your-google-ai-studio-key"
 For agents or direct use:
 
 ```text
-uv run python scripts/parse_vision.py <absolute_file_path> [--type TYPE]
+uv run python scripts/parse_vision.py <absolute_file_path> [--type TYPE] [--use-liteparse]
 ```
+
+`--use-liteparse` triggers a hybrid extraction pipeline that locally extracts deterministic OCR text from the document and appends it to the Gemini prompt context. This drastically reduces numeric hallucinations on dense tabular data (like COAs and Invoices).
 
 `--type TYPE` skips the classification pass and goes straight to extraction. Useful when the caller already knows the document type. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `PAYMENT_PROOF`, `UNKNOWN`.
 

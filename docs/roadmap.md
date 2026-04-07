@@ -289,17 +289,17 @@ that adds schema support must be tested against the relevant files.
 - **Technical Boundary:**
   - Add `liteparse` to `pyproject.toml` dependencies.
   - Create `scripts/extract_text.py` as a standalone tool that uses `liteparse` to parse a file and output text to `stdout`.
-  - Add a `--text-context <file>` argument to `scripts/parse_vision.py` to accept the pre-processed OCR text.
-  - If `--text-context` is provided, append its contents to the `contents` array sent to Gemini, alongside the `uploaded_file`.
+  - Add a `--use-liteparse` flag to `scripts/parse_vision.py` to process the document text locally in-memory.
+  - If `--use-liteparse` is provided, append the OCR text to the `contents` array sent to Gemini, alongside the `uploaded_file`.
   - Inject explicit conflict resolution instructions into `build_extraction_prompt_for_type()`:
     - "Base structure and context on the visual document."
     - "Base exact spellings, numerical values, and lot numbers on the provided text extraction."
     - "If the provided text is garbled, irrelevant, or missing data, trust the image."
-  - Update `SKILL.md` to instruct the agent on composability: Step 1. Run `uv run python scripts/extract_text.py <file> > context.md`. Step 2. Run `uv run python scripts/parse_vision.py <file> --text-context context.md`.
+  - Update `SKILL.md` to instruct the agent on executing the single-command hybrid extraction: `uv run python scripts/parse_vision.py <file> --use-liteparse`.
 - **Verification Criteria (Definition of Done):**
   - `scripts/extract_text.py` runs independently and prints parsed text.
-  - `scripts/parse_vision.py` accepts and passes external text context to the LLM.
-  - Snapshots run via `evals/snapshot.py approve --all` complete successfully.
+  - `scripts/parse_vision.py` accepts the `--use-liteparse` flag and executes OCR in-memory.
+  - Snapshots run via `evals/snapshot.py approve --all` complete successfully using the new flag.
   - `compare-models` running the new pipeline against the old baseline shows zero degraded fields on `COA` and `INVOICE` documents.
 
 ### EPIC-011: Quantitative Eval Reporting & Advanced Fuzzy Math

@@ -19,18 +19,12 @@ The invocation is: `/doc-extractor <path> [--type TYPE]`
 
 ## Execution
 
-For best results and to eliminate numeric hallucinations (especially on dense tabular data like COAs and Invoices), use the hybrid extraction pipeline:
+For best results and to eliminate numeric hallucinations (especially on dense tabular data like COAs and Invoices), use the hybrid extraction pipeline flag (`--use-liteparse`). This processes the document's text locally and passes it to the vision model in-memory.
 
 ```bash
-# Step 1: Pre-process with local text extraction
-uv run python ${SKILL_DIR}/scripts/extract_text.py "<path>" > context.md
+# Recommended: Hybrid extraction (Vision + Local Text)
+python ${SKILL_DIR}/scripts/parse_vision.py "<path>" --use-liteparse
 
-# Step 2: Extract vision context with the pre-processed text
-uv run python ${SKILL_DIR}/scripts/parse_vision.py "<path>" --text-context context.md
-```
-
-Alternatively, you can run without text context:
-```bash
 # Without type hint (two-pass: classify then extract)
 python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
 
