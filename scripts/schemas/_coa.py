@@ -41,7 +41,7 @@ class LabConclusion(str, Enum):
 
 
 class TestResult(BaseModel):
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(use_enum_values=True)
 
     test_category: TestCategory = Field(
         ...,
@@ -111,7 +111,7 @@ class TestResult(BaseModel):
 
 
 class CoaHeader(BaseModel):
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(use_enum_values=True)
 
     testing_lab_name: str = Field(
         ...,
@@ -186,7 +186,7 @@ class CoaHeader(BaseModel):
 class CoaExtraction(BaseModel):
     """Root schema for COA extraction. Represents a complete Certificate of Analysis."""
 
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(use_enum_values=True)
 
     header_data: CoaHeader = Field(
         ...,

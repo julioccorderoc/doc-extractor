@@ -26,6 +26,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any, Callable, TypeVar
 
 from google import genai
 from google.genai import errors as genai_errors
@@ -66,7 +67,10 @@ def validate_file(file_path: str) -> Path:
     return path
 
 
-def with_retry(fn, *args, **kwargs):
+T = TypeVar("T")
+
+
+def with_retry(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     """Execute fn with exponential backoff for retryable API errors (429, 500, 503)."""
     for attempt in range(MAX_RETRIES):
         try:
@@ -159,7 +163,7 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
     try:
         client.files.delete(name=uploaded_file.name)
         print_err(f"Cleaned up: {uploaded_file.name}")
-    except Exception as e:
+    except genai_errors.APIError as e:
         print_err(f"Warning: Cleanup failed: {e}")
 
 

@@ -36,7 +36,7 @@ class LabelOrderAckPayload(BaseModel):
         default=None, description="Document date in YYYY-MM-DD format"
     )
     vendor_name: Optional[str] = Field(default=None, description="Label printer name")
-    acknowledgement_number: Optional[str] = Field(
+    doc_number: Optional[str] = Field(
         default=None, description="Vendor's internal confirmation/order number"
     )
     po_number: Optional[str] = Field(

@@ -54,7 +54,7 @@ def test_coa_extraction_validates():
     assert result.header_data.lot_number == "LOT001"
     assert len(result.test_results) == 1
     assert result.test_results[0].specific_analyte == "Moisture Content"
-    assert result.test_results[0].lab_conclusion.value == "PASS"
+    assert result.test_results[0].lab_conclusion == "PASS"
 
 
 def test_invoice_payload_validates():
@@ -102,21 +102,25 @@ def test_quote_payload_validates():
     data = {
         "date": "2026-03-01",
         "vendor_name": "QuoteCo",
-        "quote_number": "Q-001",
-        "line_items": [
+        "doc_number": "Q-001",
+        "quoted_items": [
             {
                 "description": "Bottles",
-                "quantity": 500,
-                "quantity_unit": "bottle",
-                "unit_price": 0.10,
-                "total": 50.0,
+                "pricing_tiers": [
+                    {
+                        "quantity": 500,
+                        "quantity_unit": "bottle",
+                        "unit_price": 0.10,
+                        "total_price": 50.0,
+                    }
+                ],
             }
         ],
-        "total": 50.0,
+        "grand_total": 50.0,
     }
     result = QuotePayload.model_validate(data)
-    assert result.quote_number == "Q-001"
-    assert result.total == 50.0
+    assert result.doc_number == "Q-001"
+    assert result.grand_total == 50.0
 
 
 def test_product_spec_sheet_payload_validates():
@@ -284,7 +288,7 @@ def test_label_order_ack_payload_validates():
     data = {
         "date": "2026-02-12",
         "vendor_name": "Label Printer Inc",
-        "acknowledgement_number": "423747",
+        "doc_number": "423747",
         "po_number": "BL6",
         "delivery_date": "2026-03-01",
         "line_items": [
@@ -294,18 +298,20 @@ def test_label_order_ack_payload_validates():
                 "quantity_unit": "cps.",
                 "unit_price": 0.228,
                 "total": 301.61,
-                "label_size": 'Rectangle 2.750" x 7.000"',
-                "substrate": "2.0 mil Metallized BOPP",
-                "inks": "CMYK+ Premium White",
+                "label_specs": {
+                    "label_size": 'Rectangle 2.750" x 7.000"',
+                    "substrate": "2.0 mil Metallized BOPP",
+                    "inks": "CMYK+ Premium White",
+                },
             }
         ],
         "grand_total": 703.56,
     }
     result = LabelOrderAckPayload.model_validate(data)
-    assert result.acknowledgement_number == "423747"
+    assert result.doc_number == "423747"
     assert result.delivery_date == "2026-03-01"
     assert len(result.line_items) == 1
-    assert result.line_items[0].substrate == "2.0 mil Metallized BOPP"
+    assert result.line_items[0].label_specs.substrate == "2.0 mil Metallized BOPP"
 
 
 # ---------------------------------------------------------------------------
@@ -440,14 +446,14 @@ def test_extraction_result_dispatches_label_order_ack():
         "extracted_date": "2026-04-06",
         "payload": {
             "vendor_name": "Label Printer Inc",
-            "acknowledgement_number": "423747",
+            "doc_number": "423747",
             "po_number": "BL6",
             "line_items": [],
         },
     }
     result = ExtractionResult.model_validate(data)
     assert isinstance(result.payload, LabelOrderAckPayload)
-    assert result.payload.acknowledgement_number == "423747"
+    assert result.payload.doc_number == "423747"
 
 
 # ---------------------------------------------------------------------------

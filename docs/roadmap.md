@@ -201,7 +201,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
 - **Dependencies:** EPIC-006, EPIC-007
 - **Business Objective:** Establish a quality benchmark across all four target models so the best cost/quality tradeoff can be chosen for production.
 - **Models to benchmark:**
-  1. `gemini-2.5-pro-preview` — highest quality, most expensive (baseline)
+  1. `gemini-3.1-pro-preview` — highest quality, most expensive (baseline)
   2. `gemini-2.5-flash` — default, good quality, low cost
   3. `gemma-4-26b-a4b-it` — free tier, large model
 - **Technical Boundary:**
@@ -230,7 +230,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
   - Add `LabelOrderAckPayload` Pydantic model to `scripts/schemas/` with fields:
     - `date` (YYYY-MM-DD)
     - `vendor_name` — label printer name
-    - `acknowledgement_number` — vendor's internal confirmation/order number
+    - `doc_number` — vendor's internal confirmation/order number
     - `po_number` — buyer's PO number being acknowledged
     - `line_items[]` — each item has: `description`, `quantity` [number],
       `quantity_unit` (e.g. 'label', 'roll'), `unit_price`, `total`,
@@ -284,6 +284,71 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
   - String arrays with reordered words (e.g., `"Vitamin C 500mg"` vs `"500mg Vitamin C"`) evaluate as a Soft Match using `rapidfuzz`.
   - The "Hard Differences" section of the generated markdown report exclusively contains genuine data mismatches (`✗`), completely devoid of case or fuzzy matches.
   - Every document in the report displays its specific `(matches/total)` ratio and percentage.
+
+### EPIC-012: The Objective Function (F1 Score)
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-011
+- **Business Objective:** Establish a continuous, scalar reward signal required for autonomous LLM optimization (Karpathy's "fixed metric"). Binary pass/fail regression is insufficient for automated hyperparameter/prompt tuning.
+- **Context:** To implement autonomous research, an agent needs an F1 score (0.0 to 100.0) quantifying extraction accuracy relative to a human-verified Ground Truth, punishing both hallucinations (False Positives) and omissions (False Negatives).
+- **Technical Boundary:**
+  - Create `evals/source_of_truth/` directory.
+  - Populate `source_of_truth` with the highest-quality existing snapshots, manually verified and scrubbed of any errors.
+  - Create `evals/score.py`.
+  - Implement recursive Dict traversal to calculate true positives (using `rapidfuzz` from EPIC-011), false positives, and false negatives.
+  - Execute `parse_vision.py` over `test_docs/`, compare against `source_of_truth/`.
+  - Ensure the script outputs a solitary float to stdout (e.g., `84.5`) representing the global F1 score across the dataset.
+- **Verification Criteria (Definition of Done):**
+  - `uv run python evals/score.py` executes successfully.
+  - Output is a single deterministic float value to stdout.
+  - Adding a hallucinated field to a parsed JSON correctly lowers Precision.
+  - Deleting a required field from a parsed JSON correctly lowers Recall.
+
+### EPIC-013: Autoresearch Orchestrator
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-012
+- **Business Objective:** Close the autonomous optimization loop. Deploy an LLM agent that iteratively rewrites extraction prompts, runs the objective function (`score.py`), and commits or reverts its own code based on the scalar metric.
+- **Context:** Direct port of the `karpathy/autoresearch` architecture. The "target space" is `scripts/prompts.py` and `scripts/schemas/`. The "loop" modifies code, evaluates, and decides.
+- **Technical Boundary:**
+  - Create `program.md` at project root. This is the human steering interface (e.g., "Focus on extracting line item prices correctly").
+  - Create `scripts/autoresearch.py` orchestrator.
+  - Implement the Execution Loop:
+    1. Read `program.md`, `prompts.py`, and target schemas.
+    2. Invoke Gemini/Claude API (system prompt: "You are an AI optimization researcher. Propose code diffs to increase the F1 score.").
+    3. Apply the generated code modifications to `scripts/prompts.py` or schemas.
+    4. Execute `uv run python evals/score.py`.
+    5. Compare `new_score` vs `best_score`.
+    6. If `new_score > best_score`, log success, update `best_score`. Else, `git checkout -- scripts/` (Revert) and feedback the failure mode to the LLM context.
+  - Enforce a strict iteration budget (e.g., `MAX_ITERATIONS = 10`) to prevent runaway API costs.
+- **Verification Criteria (Definition of Done):**
+  - `uv run python scripts/autoresearch.py` executes an uninterrupted loop.
+  - The script successfully modifies `prompts.py`.
+  - The script successfully reverts modifications when the F1 score decreases.
+  - The script terminates cleanly when `MAX_ITERATIONS` is hit, leaving the repository in the highest-scoring state.
+
+### EPIC-014: Datalab.to Hybrid Extraction Sandbox
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-006
+- **Business Objective:** Evaluate if Datalab.to provides higher fidelity structured extraction (especially for dense tables like COAs) than pure Gemini, by building a parallel sandbox and running head-to-head snapshot comparisons without altering the core production script.
+- **Context:** Datalab.to provides purpose-built document layout parsing and provides field-level citations. We will use a Two-Pass Hybrid: Pass 1 uses `google-genai` to classify the document, and Pass 2 maps our existing Pydantic schemas to Datalab's JSON Schema format for extraction.
+- **Technical Boundary:**
+  - Create an experimental directory: `experiments/datalab_hybrid/`.
+  - Create a sandbox `requirements.txt` containing `datalab-python-sdk`.
+  - Create `experiments/datalab_hybrid/parse_datalab.py` that implements the hybrid handoff:
+    1. Call Gemini to classify the document.
+    2. Dynamically translate the targeted Pydantic schema to JSON Schema (`target_class.model_json_schema()`).
+    3. Invoke Datalab's `/extract` API via the SDK.
+    4. Validate and re-hydrate the result using Pydantic.
+  - Adapt `evals/snapshot.py` to support an `--engine datalab` (or similar) flag. If flagged, `run_extraction()` routes to the new sandbox script instead of `scripts/parse_vision.py`.
+  - Generate a new set of snapshots for the Datalab engine using `approve --all`.
+  - Run a `compare-models` report to output a markdown diff of Gemini vs Datalab.
+- **Verification Criteria (Definition of Done):**
+  - `parse_datalab.py` correctly imports our shared schemas and successfully extracts JSON.
+  - `uv run python evals/snapshot.py --engine datalab approve --all` seeds complete snapshots.
+  - `uv run python evals/snapshot.py compare-models gemini-2.5-flash datalab` generates a diff report in `evals/reports/`.
+  - Core production (`scripts/parse_vision.py`) remains entirely untouched.
 
 ## Minor Backlog
 
