@@ -26,6 +26,13 @@ import os
 import sys
 import time
 from pathlib import Path
+import argparse
+import pydantic
+import requests
+import tempfile
+import urllib.parse
+from pypdf import PdfReader, PdfWriter
+
 from typing import Any, Callable, TypeVar
 
 from google import genai
@@ -41,7 +48,7 @@ from schemas import (
 )
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_RETRIES = 3
 RETRYABLE_CODES = {429, 500, 503}
 UPLOAD_TIMEOUT_SECS = 300  # 5 minutes max for file processing
@@ -66,6 +73,78 @@ def validate_file(file_path: str) -> Path:
         sys.exit(2)
     return path
 
+
+
+def download_url(url: str, dest_dir: Path) -> Path:
+    print_err(f"Downloading {url}...")
+    try:
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # Try to get filename from Content-Disposition or URL
+        filename = "downloaded_file.pdf"
+        if "content-disposition" in response.headers:
+            cd = response.headers["content-disposition"]
+            if "filename=" in cd:
+                filename = cd.split("filename=")[1].strip('"\'')
+        else:
+            parsed = urllib.parse.urlparse(url)
+            if parsed.path:
+                name = parsed.path.split("/")[-1]
+                if name:
+                    filename = name
+                    
+        dest_path = dest_dir / filename
+        with open(dest_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                
+        return dest_path
+    except Exception as e:
+        print_err(f"Error downloading URL: {e}")
+        sys.exit(2)
+
+
+def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
+    print_err(f"Slicing PDF to pages: {pages_spec}")
+    try:
+        reader = PdfReader(file_path)
+        writer = PdfWriter()
+        
+        # Parse pages_spec: "1-3", "1,3,5"
+        pages_to_keep = set()
+        for part in pages_spec.split(","):
+            part = part.strip()
+            if "-" in part:
+                start, end = part.split("-")
+                start_idx = int(start) - 1
+                end_idx = int(end) - 1
+                for i in range(start_idx, end_idx + 1):
+                    pages_to_keep.add(i)
+            else:
+                pages_to_keep.add(int(part) - 1)
+        
+        num_pages = len(reader.pages)
+        added_any = False
+        for i in sorted(pages_to_keep):
+            if 0 <= i < num_pages:
+                writer.add_page(reader.pages[i])
+                added_any = True
+            else:
+                print_err(f"Warning: Page {i + 1} is out of range (PDF has {num_pages} pages).")
+                
+        if not added_any:
+            print_err("Error: No valid pages selected for slicing.")
+            sys.exit(2)
+            
+        dest_path = dest_dir / f"sliced_{file_path.name}"
+        with open(dest_path, "wb") as f:
+            writer.write(f)
+            
+        return dest_path
+    except Exception as e:
+        print_err(f"Error slicing PDF: {e}")
+        sys.exit(2)
 
 T = TypeVar("T")
 
@@ -168,34 +247,31 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
 
 
 def main() -> None:
-    # Parse args: <file_path> [--type TYPE] [--use-liteparse]
-    args = sys.argv[1:]
+    parser = argparse.ArgumentParser(description="Document extraction engine using Google Gemini/Gemma models.")
+    parser.add_argument("file_path", nargs="?", help="Local file path")
+    parser.add_argument("--url", help="Remote URL to download and extract")
+    parser.add_argument("--type", help="Skip pass 1 and use the supplied document type directly")
+    parser.add_argument("--use-liteparse", action="store_true", help="Use liteparse for local text extraction")
+    parser.add_argument("--output", help="Write JSON directly to this file instead of stdout")
+    parser.add_argument("--pages", help="Pages to extract (e.g., '1-3' or '1,3,5'). Only applies to PDFs.")
+    parser.add_argument("--debug", action="store_true", help="Dump raw LLM response string on validation failure")
+
+    args = parser.parse_args()
+
+    if not args.file_path and not args.url:
+        print_err("Error: Must provide either a local file_path or --url")
+        parser.print_help(sys.stderr)
+        sys.exit(2)
+
     hint_type: DocumentType | None = None
-    use_liteparse: bool = False
-
-    if "--use-liteparse" in args:
-        use_liteparse = True
-        args.remove("--use-liteparse")
-
-    if "--type" in args:
-        idx = args.index("--type")
-        if idx + 1 >= len(args):
-            print_err("Error: --type requires a document type value.")
-            sys.exit(2)
-        raw_type = args[idx + 1].upper()
+    if args.type:
+        raw_type = args.type.upper()
         try:
             hint_type = DocumentType(raw_type)
         except ValueError:
             valid = ", ".join(t.value for t in DocumentType)
             print_err(f"Error: Unknown document type '{raw_type}'. Valid: {valid}")
             sys.exit(2)
-        args = args[:idx] + args[idx + 2 :]
-
-    if len(args) != 1:
-        print_err(
-            "Usage: python scripts/parse_vision.py <file_path> [--type TYPE] [--use-liteparse]"
-        )
-        sys.exit(2)
 
     # Determine model and API key
     model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
@@ -220,77 +296,108 @@ def main() -> None:
             )
             sys.exit(1)
 
-    file_path = validate_file(args[0])
-    client = genai.Client(api_key=api_key)
-
-    # Extract text locally if requested
-    text_context: str | None = None
-    if use_liteparse:
-        try:
-            from liteparse import LiteParse
-
-            print_err("Extracting local text context via liteparse...")
-            lp = LiteParse()
-            lp_result = lp.parse(str(file_path))
-            if hasattr(lp_result, "text") and lp_result.text.strip():
-                text_context = lp_result.text
-            else:
-                print_err("Warning: liteparse returned empty text.")
-        except ImportError:
-            print_err(
-                "Warning: liteparse is not installed. Skipping local text extraction."
-            )
-        except Exception as e:
-            print_err(f"Warning: liteparse extraction failed: {e}")
-
-    uploaded_file = None
-    try:
-        uploaded_file = with_retry(upload_file, client, file_path)
-        uploaded_file = wait_for_processing(client, uploaded_file)
-
-        # Pass 1 — classify (skip if caller supplied --type)
-        if hint_type is not None:
-            doc_type = hint_type
-            confidence = 1.0
-            print_err(f"Using caller-supplied type: {doc_type.value}")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        
+        if args.url:
+            file_path = download_url(args.url, temp_dir_path)
+            # Re-validate extension after download if possible, but skip existence check
+            if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+                print_err(
+                    f"Error: Unsupported file type '{file_path.suffix}'. "
+                    f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                )
+                sys.exit(2)
         else:
-            classification = with_retry(classify, client, uploaded_file, model)
-            doc_type = classification.document_type
-            confidence = classification.confidence
-            print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+            file_path = validate_file(args.file_path)
 
-        # Pass 2 — extract with the specific schema
-        payload = None
-        if doc_type in PAYLOAD_SCHEMA_MAP:
-            payload_json = with_retry(
-                extract_typed, client, uploaded_file, model, doc_type, text_context
+        if args.pages:
+            if file_path.suffix.lower() == ".pdf":
+                file_path = slice_pdf(file_path, args.pages, temp_dir_path)
+            else:
+                print_err("Warning: --pages only applies to PDF files. Ignoring.")
+
+        client = genai.Client(api_key=api_key)
+
+        # Extract text locally if requested
+        text_context: str | None = None
+        if args.use_liteparse:
+            try:
+                from liteparse import LiteParse
+
+                print_err("Extracting local text context via liteparse...")
+                lp = LiteParse()
+                lp_result = lp.parse(str(file_path))
+                if hasattr(lp_result, "text") and lp_result.text.strip():
+                    text_context = lp_result.text
+                else:
+                    print_err("Warning: liteparse returned empty text.")
+            except ImportError:
+                print_err(
+                    "Warning: liteparse is not installed. Skipping local text extraction."
+                )
+            except Exception as e:
+                print_err(f"Warning: liteparse extraction failed: {e}")
+
+        uploaded_file = None
+        try:
+            uploaded_file = with_retry(upload_file, client, file_path)
+            uploaded_file = wait_for_processing(client, uploaded_file)
+
+            # Pass 1 — classify (skip if caller supplied --type)
+            if hint_type is not None:
+                doc_type = hint_type
+                confidence = 1.0
+                print_err(f"Using caller-supplied type: {doc_type.value}")
+            else:
+                classification = with_retry(classify, client, uploaded_file, model)
+                doc_type = classification.document_type
+                confidence = classification.confidence
+                print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+
+            # Pass 2 — extract with the specific schema
+            payload = None
+            if doc_type in PAYLOAD_SCHEMA_MAP:
+                payload_json = with_retry(
+                    extract_typed, client, uploaded_file, model, doc_type, text_context
+                )
+                try:
+                    payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
+                except pydantic.ValidationError as e:
+                    if args.debug:
+                        print_err(f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n")
+                    raise e
+
+            result = ExtractionResult(
+                document_type=doc_type,
+                confidence=confidence,
+                extracted_date=datetime.date.today().isoformat(),
+                payload=payload,
             )
-            payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
+            
+            output_json = result.model_dump_json(indent=2)
+            if args.output:
+                with open(args.output, "w") as f:
+                    f.write(output_json)
+                print_err(f"Output successfully written to {args.output}")
+            else:
+                print(output_json)
 
-        result = ExtractionResult(
-            document_type=doc_type,
-            confidence=confidence,
-            extracted_date=datetime.date.today().isoformat(),
-            payload=payload,
-        )
-        print(result.model_dump_json(indent=2))
-
-    except genai_errors.APIError as e:
-        print_err(
-            f"Error: API failure after {MAX_RETRIES} retries "
-            f"(HTTP {e.code}): {e.message}"
-        )
-        sys.exit(3)
-    except TimeoutError as e:
-        print_err(f"Error: {e}")
-        sys.exit(3)
-    except RuntimeError as e:
-        print_err(f"Error: {e}")
-        sys.exit(3)
-    finally:
-        if uploaded_file is not None:
-            cleanup(client, uploaded_file)
-
+        except genai_errors.APIError as e:
+            print_err(
+                f"Error: API failure after {MAX_RETRIES} retries "
+                f"(HTTP {e.code}): {e.message}"
+            )
+            sys.exit(3)
+        except TimeoutError as e:
+            print_err(f"Error: {e}")
+            sys.exit(3)
+        except RuntimeError as e:
+            print_err(f"Error: {e}")
+            sys.exit(3)
+        finally:
+            if uploaded_file is not None:
+                cleanup(client, uploaded_file)
 
 if __name__ == "__main__":
     main()
