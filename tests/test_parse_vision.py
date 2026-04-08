@@ -137,3 +137,68 @@ def test_main_cleanup_runs_on_extraction_failure(tmp_path, monkeypatch):
 
     assert exc.value.code == 3
     mock_cleanup.assert_called_once_with(mock_client, mock_uploaded)
+import pytest
+from unittest.mock import patch, MagicMock
+from pathlib import Path
+import sys
+
+import parse_vision
+
+# ---------------------------------------------------------------------------
+# download_url
+# ---------------------------------------------------------------------------
+
+@patch("parse_vision.requests.get")
+def test_download_url_success(mock_get, tmp_path):
+    mock_resp = MagicMock()
+    mock_resp.headers = {"content-disposition": "attachment; filename=\"remote_doc.pdf\""}
+    mock_resp.iter_content.return_value = [b"pdf content"]
+    mock_get.return_value = mock_resp
+    
+    dest_path = parse_vision.download_url("http://example.com/file", tmp_path)
+    
+    assert dest_path == tmp_path / "remote_doc.pdf"
+    assert dest_path.read_bytes() == b"pdf content"
+    mock_get.assert_called_once_with("http://example.com/file", stream=True, timeout=30)
+
+@patch("parse_vision.requests.get")
+def test_download_url_fallback_filename(mock_get, tmp_path):
+    mock_resp = MagicMock()
+    mock_resp.headers = {}
+    mock_resp.iter_content.return_value = [b"content"]
+    mock_get.return_value = mock_resp
+    
+    dest_path = parse_vision.download_url("http://example.com/some/path/my_file.pdf", tmp_path)
+    
+    assert dest_path == tmp_path / "my_file.pdf"
+    assert dest_path.read_bytes() == b"content"
+
+# ---------------------------------------------------------------------------
+# slice_pdf
+# ---------------------------------------------------------------------------
+
+@patch("parse_vision.PdfWriter")
+@patch("parse_vision.PdfReader")
+def test_slice_pdf(mock_reader_class, mock_writer_class, tmp_path):
+    # Setup mock reader with 5 pages
+    mock_reader = MagicMock()
+    mock_reader.pages = [MagicMock(), MagicMock(), MagicMock(), MagicMock(), MagicMock()]
+    mock_reader_class.return_value = mock_reader
+    
+    # Setup mock writer
+    mock_writer = MagicMock()
+    mock_writer_class.return_value = mock_writer
+    
+    file_path = tmp_path / "original.pdf"
+    file_path.touch()
+    
+    # Slice to pages 1, 3, and 5 (indices 0, 2, 4)
+    dest_path = parse_vision.slice_pdf(file_path, "1,3,5", tmp_path)
+    
+    assert dest_path == tmp_path / "sliced_original.pdf"
+    assert mock_writer.add_page.call_count == 3
+    
+    # Slicing with ranges "1-3,5" -> indices 0,1,2, 4
+    mock_writer.reset_mock()
+    dest_path = parse_vision.slice_pdf(file_path, "1-3,5", tmp_path)
+    assert mock_writer.add_page.call_count == 4

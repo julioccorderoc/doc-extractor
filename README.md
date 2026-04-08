@@ -101,12 +101,16 @@ export GEMINI_DOC_EXTRACTOR_KEY="your-google-ai-studio-key"
 For agents or direct use:
 
 ```text
-uv run python scripts/parse_vision.py <absolute_file_path> [--type TYPE] [--use-liteparse]
+uv run python scripts/parse_vision.py <path_or_url> [options]
 ```
 
-`--use-liteparse` triggers a hybrid extraction pipeline that locally extracts deterministic OCR text from the document and appends it to the Gemini prompt context. This drastically reduces numeric hallucinations on dense tabular data (like COAs and Invoices).
-
-`--type TYPE` skips the classification pass and goes straight to extraction. Useful when the caller already knows the document type. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `PAYMENT_PROOF`, `UNKNOWN`.
+**Options:**
+- `--url <URL>`: Download a remote document to a temporary file before extraction.
+- `--type TYPE`: Skip the classification pass and go straight to extraction. Useful when the caller already knows the document type. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
+- `--use-liteparse`: Triggers a hybrid extraction pipeline that locally extracts deterministic OCR text from the document and appends it to the Gemini prompt context. This drastically reduces numeric hallucinations on dense tabular data (like COAs and Invoices).
+- `--output <file.json>`: Write the extracted JSON directly to a file instead of stdout. Recommended for extremely large documents to avoid terminal output limits.
+- `--pages "<spec>"`: Slice a PDF to specific pages (e.g. `"1-3"`, `"1,3,5"`) before extraction to save tokens and improve focus.
+- `--debug`: Dump the raw LLM string to stderr if JSON schema validation fails.
 
 **Exit codes:**
 
@@ -152,18 +156,18 @@ uv run pytest
 
 ## Model Choice
 
-The default model is **`gemini-2.5-flash`**. This was validated against `gemini-3.1-pro-preview` across 25 real supply chain documents (COAs, invoices, packaging specs, label proofs, payment records).
+The default model is **`gemini-3.1-pro-preview`**. This was rigorously validated against `gemini-2.5-flash` and legacy `datalab` extractions across 31 complex supply chain documents (COAs, invoices, packaging specs, label proofs, payment records).
 
 Key findings:
 
-- **2.5 Flash wins** on COA test result completeness, deposit field recognition, packaging component extras, and spec sheet structured fields.
-- **3.1 Pro wins** on date disambiguation (doc date vs. revision date) and extracting complete marketing text blocks.
-- Overall, 2.5 Flash is more reliable and consistent across all document types, at significantly lower cost and latency.
+- **Gemini 3.1 Pro Preview is the undisputed winner.** It handles complex layouts, deeply nested schemas, and visual reasoning flawlessly with a near-perfect extraction rate, only occasionally varying in trivial formatting (e.g., curly vs straight quotes).
+- **Gemini 2.5 Flash** proved too erratic for this workload, struggling with attention span on complex documents, frequently misclassifying document types, and dropping large nested objects.
+- **Pure GenAI vs Legacy Pipelines:** The pure GenAI approach utilizing Gemini 3.1 Pro vastly outperformed the legacy `datalab` extraction pipeline, providing cleaner, more accurate, and more literal extractions without injecting hallucinated data or misaligned business logic assumptions.
 
-To switch models:
+To switch models for experimentation:
 
 ```bash
-export GEMINI_MODEL="gemini-3.1-pro-preview"
+export GEMINI_MODEL="gemini-2.5-flash"
 ```
 
 ---

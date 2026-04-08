@@ -3,6 +3,16 @@
 ## Status: Schema Normalization & Generic Payload (Completed)
 
 ## What Was Done (Current Session)
+- **EPIC-015 (Agentic Ergonomics & CLI Expansion)**:
+  - Transitioned `parse_vision.py` custom arg parsing to `argparse` for robust options.
+  - Added `--url` support using `requests` to download remote documents to a temp directory before extraction.
+  - Added `--output` flag to save JSON directly to a file, bypassing terminal stdout capture limits.
+  - Added `--pages` flag utilizing `pypdf` to slice multipage PDFs, avoiding max-token limits on massive documents.
+  - Added `--debug` flag to dump raw LLM responses to stderr when Pydantic `ValidationError` occurs.
+  - Updated `SKILL.md` to detail these arguments.
+  - All unit tests pass.
+
+## What Was Done (Previous)
 - **Schema Normalization**: Standardized `vendor_product_id` and `buyer_product_id` across all relevant schemas (`_coa`, `_invoice`, `_quote`, `_product_spec`, `_packaging_spec`, `_label_proof`, `_label_order_ack`) to ensure robust ERP integration mapping.
 - **Technical Label Specs Refactor**: Consolidated redundant label specification fields into a shared `TechnicalLabelSpecs` model in `_shared.py`, drying up `_label_order_ack`, `_label_proof`, and `_packaging_spec`.
 - **Dynamic Quotes**: Completely refactored `_quote.py` to support dynamic `QuotedItem` lists containing `technical_details` (as a key-value array), volume-based `pricing_tiers`, and `additional_fees`.
@@ -10,6 +20,8 @@
 - **Generic Fallback**: Replaced the static `UNKNOWN` string with a fully structured `GenericPayload` in `_generic.py`. Unsupported documents now extract dynamic `key_value_pairs`, full tabular data (`tables`), `title`, and AI-generated `summary`.
 - **Documentation**: Simplified `docs/PRD.md` to point to the Pydantic models as the absolute source of truth. Removed the hardcoded test documents table from `docs/roadmap.md` since the test runner discovers documents dynamically.
 - **Test Corpus**: Added five new quote documents to `test_docs/manifest.json`.
+- **Agent Interoperability**: Updated `SKILL.md` frontmatter with comprehensive metadata (including OpenClaw specific keys and generalized LlamaIndex compatibility fields) and strict execution guardrails inspired by GLM-OCR.
+- **Roadmap Expansion**: Added EPIC-015 (Agentic Ergonomics & CLI Expansion), EPIC-016 (Format Preprocessing Layer for .xlsx/.docx), and EPIC-017 (Batch Directory Processing) to `docs/roadmap.md`.
 
 ## What Was Done (2026-04-07, EPIC-010 & EPIC-011)
 

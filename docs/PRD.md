@@ -72,21 +72,9 @@ The script must *always* return an object matching this top-level schema. The st
 
 ### 4.1 Required Sub-Schemas (The payload object)
 
-Defined as Pydantic v2 models in `scripts/schemas/`. The models themselves are the single source of truth for the JSON Schema returned by the API via `.model_json_schema()`.
+Defined as Pydantic v2 models in `scripts/schemas/`. The models themselves are the absolute single source of truth for the JSON Schema returned by the API via `.model_json_schema()`.
 
-The following top-level payload models are defined:
-
-- **COA** (`CoaExtraction`)
-- **COA_RAW** (`CoaRawExtraction` - To be defined)
-- **INVOICE** (`InvoicePayload`)
-- **QUOTE** (`QuotePayload`)
-- **LABEL** (`LabelPayload`)
-- **LABEL_ORDER_ACK** (`LabelOrderAckPayload`)
-- **LABEL_PROOF** (`LabelProofPayload`)
-- **PRODUCT_SPEC_SHEET** (`ProductSpecSheetPayload`)
-- **PACKAGING_SPEC_SHEET** (`PackagingSpecSheetPayload`)
-- **PAYMENT_PROOF** (`PaymentProofPayload`)
-- **UNKNOWN** (`GenericPayload` - dynamic key/value and table extraction for unsupported formats)
+Rather than listing all document types here, refer directly to `scripts/schemas/_enums.py` for the active list of supported `DocumentType` enum values, and `scripts/schemas/_envelope.py` to see how each type maps to its respective payload model.
 
 All extracted dates must be in the `YYYY-MM-DD` format.
 

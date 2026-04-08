@@ -4,7 +4,7 @@ A skill that extracts structured JSON from supply chain documents (PDFs, images)
 
 ## Project Structure
 
-```
+```text
 doc-extractor/                    # This directory IS the publishable skill
 ├── SKILL.md                      # Skill entry point — agent-agnostic instructions
 ├── CLAUDE.md                     # You are here (Claude Code session context)
@@ -54,13 +54,14 @@ python evals/snapshot.py compare         # regression check
 ## Environment Variables
 
 - `GEMINI_DOC_EXTRACTOR_KEY` — Required. Google AI Studio API key.
-- `GEMINI_MODEL` — Optional. Override model (default: `gemini-2.5-flash`).
+- `GEMINI_MODEL` — Optional. Override model (default: `gemini-3.1-pro-preview`).
 
 ## Working Conventions
 
 ### Always Keep These Files Updated
 
 After every session or significant change:
+
 1. **`.ai/current-plan.md`** — Update with current status, what was done, what's next
 2. **`.ai/memory.md`** — Record learnings, decisions, gotchas discovered during the session
 3. **`.ai/errors.md`** — Log any errors encountered and their resolutions
@@ -86,12 +87,14 @@ After every session or significant change:
 - Test documents live in `test_docs/` — these are real supply chain documents
 - Never commit test docs to public repositories (contain business data)
 - After EPIC-006: use the eval framework to validate changes
-- Future: integrate with https://github.com/karpathy/autoresearch for automated eval
+- Future: integrate with <https://github.com/karpathy/autoresearch> for automated eval
 
 ### Model Switching
 
 Changing the model is a one-line env var change:
+
 ```bash
 export GEMINI_MODEL="gemma-4-26b-a4b-it"  # Switch to Gemma 4
 ```
+
 No code changes required. All models use the same `google-genai` SDK surface.

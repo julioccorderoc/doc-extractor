@@ -1,6 +1,18 @@
 ---
 name: doc-extractor
 description: Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP) using Google Gemini. Invoke when the user runs /doc-extractor <path> or asks to extract or parse a supply chain document.
+compatibility: Requires Python 3.13+ and the GEMINI_DOC_EXTRACTOR_KEY environment variable.
+author: julioccorderoc
+version: "0.1.0"
+metadata:
+  openclaw:
+    requires:
+      env:
+        - GEMINI_DOC_EXTRACTOR_KEY
+      bins:
+        - python
+    primaryEnv: GEMINI_DOC_EXTRACTOR_KEY
+    emoji: "📦"
 disable-model-invocation: true
 allowed-tools:
   - Bash(python *)
@@ -10,12 +22,25 @@ allowed-tools:
 
 Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
 
+## MANDATORY RESTRICTIONS - DO NOT VIOLATE
+
+1. **ONLY use the script** - Execute the script `python scripts/parse_vision.py`
+2. **NEVER parse documents directly** - Do NOT try to extract text using built-in vision or any other method
+3. **NEVER offer alternatives** - Do NOT suggest "I can try to analyze it" or similar
+4. **IF SCRIPT FAILS** - Follow the exit code handling rules below and STOP.
+5. **NO fallback methods** - Do NOT attempt text extraction any other way
+
 ## Arguments
 
-The invocation is: `/doc-extractor <path> [--type TYPE]`
+The invocation is: `/doc-extractor <path> [options]`
 
-- `<path>` — required. Absolute or relative path to the document. It may be absolute or relative to the project root.
-- `--type TYPE` — optional. If you already know the document type from context, pass it here to skip the classification pass and save one API call. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `PAYMENT_PROOF`, `UNKNOWN`.
+- `<path>` / `--url <URL>` — required. Provide either a local file path or a remote URL to download.
+- `--type TYPE` — optional. If you already know the document type, pass it here to skip the classification pass. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
+- `--use-liteparse` — optional. Extract local text for a hybrid extraction pipeline to reduce numeric hallucinations.
+- `--output <file.json>` — optional. Write the JSON directly to the specified file instead of stdout. Recommended for large payloads to bypass terminal capture limits.
+- `--pages "<spec>"` — optional. Slice the PDF to specific pages before extraction (e.g., `"1-3"`, `"1,3,5"`). Only applies to PDF files.
+- `--debug` — optional. Dump the raw LLM response string to stderr if JSON schema validation fails.
+
 
 ## Execution
 

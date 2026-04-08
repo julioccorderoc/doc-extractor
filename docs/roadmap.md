@@ -350,6 +350,56 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
   - `uv run python evals/snapshot.py compare-models gemini-2.5-flash datalab` generates a diff report in `evals/reports/`.
   - Core production (`scripts/parse_vision.py`) remains entirely untouched.
 
+### EPIC-015: Agentic Ergonomics & CLI Expansion
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-010
+- **Business Objective:** Make `parse_vision.py` easier for autonomous agents to use by supporting remote URLs, targeted page slicing, and direct file output to bypass terminal stdout limits.
+- **Context:** Large PDFs overwhelm context limits, and agents struggle with stdout capture limits for massive JSON payloads. Supporting URLs enables cloud-native file processing.
+- **Technical Boundary:**
+  - Add `--url` flag to `parse_vision.py`. If provided, download the file to a temp directory before passing to Gemini.
+  - Add `--output <file.json>` flag. If provided, write the JSON directly to the file instead of stdout.
+  - Add `--pages "1-3"` flag (or similar syntax). Implement a preprocessing step (e.g., using `pypdf`) to slice the PDF to the specified pages before extraction.
+  - Add `--debug` or `--include-raw` flag to dump the raw LLM response string when Pydantic validation fails.
+  - Update `SKILL.md` to document the new arguments.
+- **Verification Criteria (Definition of Done):**
+  - Script successfully downloads and extracts from a valid public `--url`.
+  - Script correctly writes valid JSON to the file path specified in `--output`.
+  - Script successfully slices a multi-page PDF using `--pages` and extracts only from the target pages.
+  - `--debug` flag prints the raw text string from the model on validation failure.
+
+### EPIC-016: Format Preprocessing Layer (.xlsx/.docx to .pdf)
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-015
+- **Business Objective:** Expand the supported file types to include Office documents (Excel, Word) which are extremely common in supply chain quotes and specifications.
+- **Context:** Gemini Vision cannot natively process `.xlsx` or `.docx` files. We need a local conversion or text-extraction layer to bridge this gap.
+- **Technical Boundary:**
+  - Introduce a preprocessing utility (possibly extending `extract_text.py` or using a tool like LibreOffice/LiteParse underneath) that detects `.xlsx` and `.docx` extensions.
+  - Automatically convert these formats to `.pdf` (or extract their layout text) before passing them to the classification/extraction pipeline.
+  - Remove strict extension blocking for `.xlsx` and `.docx` in the CLI validation.
+- **Verification Criteria (Definition of Done):**
+  - Running `parse_vision.py` on an `.xlsx` file processes successfully and returns valid JSON.
+  - Running `parse_vision.py` on a `.docx` file processes successfully and returns valid JSON.
+  - Temp files generated during conversion are properly cleaned up.
+
+### EPIC-017: Batch Directory Processing
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-015
+- **Business Objective:** Enable agents to process bulk document dumps (e.g., "extract all 50 invoices from this folder") in a single command.
+- **Context:** Currently the script only accepts a single file path. Looping in bash is error-prone for agents.
+- **Technical Boundary:**
+  - Update `parse_vision.py` to accept a directory path as the `<path>` argument (or via a `--batch` flag).
+  - Iterate through all supported files in the directory.
+  - Classify and extract each file.
+  - Output a combined JSON array of `ExtractionResult` objects.
+  - Handle partial failures gracefully (e.g., file 3 fails, but files 1, 2, 4, 5 succeed and are returned).
+- **Verification Criteria (Definition of Done):**
+  - Passing a directory path outputs a valid JSON array of extraction results.
+  - Non-supported files in the directory are safely skipped.
+  - At least one file failing API extraction does not crash the entire batch process.
+
 ## Minor Backlog
 
 - [ ] Add `COA_RAW` document type and schema parsing based on PRD
