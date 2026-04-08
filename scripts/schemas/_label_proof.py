@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from ._shared import CompanyInfo, SupplementsFact
+from ._shared import CompanyInfo, SupplementsFact, TechnicalLabelSpecs
 
 
 class LabelProofPayload(BaseModel):
@@ -43,30 +43,9 @@ class LabelProofPayload(BaseModel):
     servings: Optional[int] = Field(
         default=None, description="Number of servings per container"
     )
-    # Technical print specifications
-    label_size: Optional[str] = Field(
-        default=None,
-        description="Label dimensions (e.g. '2.75\" x 7\"' or '70mm x 178mm')",
-    )
-    corner_radius: Optional[str] = Field(
-        default=None, description="Corner radius (e.g. '0.125 in.')"
-    )
-    substrate: Optional[str] = Field(
-        default=None,
-        description="Label material/substrate (e.g. '2M Metallized BOPP/S7000ER/1.2 Mil PET')",
-    )
-    inks: Optional[str] = Field(
-        default=None,
-        description="Ink colors used (e.g. 'Cyan, Magenta, Yellow, Black, Premium White')",
-    )
-    core_size: Optional[str] = Field(
-        default=None, description="Inner core diameter of the label roll"
-    )
-    max_outer_diameter: Optional[str] = Field(
-        default=None, description="Maximum outer diameter of the label roll"
-    )
-    wind_position: Optional[str] = Field(
-        default=None, description="Wind direction/position"
+    # Technical print specifications (shared with LabelOrderAckPayload)
+    label_specs: Optional[TechnicalLabelSpecs] = Field(
+        default=None, description="Technical print specifications"
     )
     # Label content
     supplements_fact_panel: list[SupplementsFact] = Field(

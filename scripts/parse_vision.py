@@ -21,16 +21,20 @@ Exit codes:
 
 from __future__ import annotations
 
-import datetime
-import os
-import sys
-import time
-from pathlib import Path
 import argparse
+import datetime
+import ipaddress
+import json
+import os
+import socket
+import sys
+import tempfile
+import time
+import urllib.parse
+from pathlib import Path
+
 import pydantic
 import requests
-import tempfile
-import urllib.parse
 from pypdf import PdfReader, PdfWriter
 
 from typing import Any, Callable, TypeVar
@@ -46,6 +50,8 @@ from schemas import (
     ExtractionResult,
     PAYLOAD_SCHEMA_MAP,
 )
+
+__version__ = "0.1.0"
 
 ALLOWED_EXTENSIONS = {
     ".pdf",
@@ -94,8 +100,30 @@ def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
     return file_path
 
 
+MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
+def _reject_private_url(url: str) -> None:
+    """Block requests to private/loopback IPs (basic SSRF protection)."""
+    hostname = urllib.parse.urlparse(url).hostname
+    if not hostname:
+        print_err("Error: URL has no hostname.")
+        sys.exit(2)
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+        for info in infos:
+            addr = ipaddress.ip_address(info[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local:
+                print_err(f"Error: URL resolves to a private/loopback address ({addr}). Refusing to download.")
+                sys.exit(2)
+    except socket.gaierror:
+        print_err(f"Error: Could not resolve hostname '{hostname}'.")
+        sys.exit(2)
+
+
 def download_url(url: str, dest_dir: Path) -> Path:
     print_err(f"Downloading {url}...")
+    _reject_private_url(url)
     try:
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
@@ -114,11 +142,20 @@ def download_url(url: str, dest_dir: Path) -> Path:
                     filename = name
 
         dest_path = dest_dir / filename
+        bytes_written = 0
         with open(dest_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_DOWNLOAD_BYTES:
+                    f.close()
+                    dest_path.unlink(missing_ok=True)
+                    print_err(f"Error: Download exceeds {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit.")
+                    sys.exit(2)
                 f.write(chunk)
 
         return dest_path
+    except SystemExit:
+        raise
     except Exception as e:
         print_err(f"Error downloading URL: {e}")
         sys.exit(2)
@@ -200,6 +237,7 @@ def with_retry(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
                 f"(attempt {attempt + 1}/{MAX_RETRIES})..."
             )
             time.sleep(wait)
+    raise RuntimeError("unreachable: with_retry exhausted loop without returning")
 
 
 def upload_file(client: genai.Client, file_path: Path) -> genai.types.File:
@@ -359,7 +397,7 @@ def process_single_file(
         return ExtractionResult(
             document_type=doc_type,
             confidence=confidence,
-            extracted_date=datetime.date.today().isoformat(),
+            extracted_date=datetime.date.today(),
             payload=payload,
         )
 
@@ -380,6 +418,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Document extraction engine using Google Gemini models."
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("file_path", nargs="?", help="Local file path")
     parser.add_argument("--url", help="Remote URL to download and extract")
     parser.add_argument(
@@ -477,8 +516,6 @@ def main() -> None:
                 res_dict = res.model_dump()
                 res_dict["source_file"] = fp.name
                 results.append(res_dict)
-
-        import json
 
         if len(results) == 1:
             output_json = json.dumps(results[0], indent=2)

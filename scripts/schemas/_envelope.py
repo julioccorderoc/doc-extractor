@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import Optional, Union
 
 from pydantic import BaseModel, Field
@@ -39,7 +40,7 @@ class ExtractionResult(BaseModel):
         ge=0.0,
         le=1.0,
     )
-    extracted_date: Optional[str] = Field(
+    extracted_date: Optional[datetime.date] = Field(
         default=None, description="Extraction date in YYYY-MM-DD format"
     )
     payload: Optional[PayloadUnion] = Field(  # type: ignore[valid-type]
