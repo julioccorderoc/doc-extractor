@@ -47,7 +47,18 @@ from schemas import (
     PAYLOAD_SCHEMA_MAP,
 )
 
-ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".docx", ".txt", ".md", ".csv"}
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".xlsx",
+    ".docx",
+    ".txt",
+    ".md",
+    ".csv",
+}
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_RETRIES = 3
 RETRYABLE_CODES = {429, 500, 503}
@@ -59,13 +70,13 @@ def print_err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-
 def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
     """Convert unsupported formats (.xlsx, .docx, .csv) to markdown text using MarkItDown."""
     if file_path.suffix.lower() in {".xlsx", ".docx", ".csv"}:
         print_err(f"Converting {file_path.suffix} to markdown via MarkItDown...")
         try:
             from markitdown import MarkItDown
+
             md = MarkItDown()
             result = md.convert(str(file_path))
             md_path = temp_dir / f"{file_path.stem}.txt"
@@ -73,7 +84,9 @@ def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
                 f.write(result.text_content)
             return md_path
         except ImportError:
-            print_err("Error: markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)")
+            print_err(
+                "Error: markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)"
+            )
             sys.exit(2)
         except Exception as e:
             print_err(f"Error converting file: {e}")
@@ -86,25 +99,25 @@ def download_url(url: str, dest_dir: Path) -> Path:
     try:
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
-        
+
         # Try to get filename from Content-Disposition or URL
         filename = "downloaded_file.pdf"
         if "content-disposition" in response.headers:
             cd = response.headers["content-disposition"]
             if "filename=" in cd:
-                filename = cd.split("filename=")[1].strip('"\'')
+                filename = cd.split("filename=")[1].strip("\"'")
         else:
             parsed = urllib.parse.urlparse(url)
             if parsed.path:
                 name = parsed.path.split("/")[-1]
                 if name:
                     filename = name
-                    
+
         dest_path = dest_dir / filename
         with open(dest_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-                
+
         return dest_path
     except Exception as e:
         print_err(f"Error downloading URL: {e}")
@@ -116,7 +129,7 @@ def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
     try:
         reader = PdfReader(file_path)
         writer = PdfWriter()
-        
+
         # Parse pages_spec: "1-3", "1,3,5"
         pages_to_keep = set()
         for part in pages_spec.split(","):
@@ -129,7 +142,7 @@ def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
                     pages_to_keep.add(i)
             else:
                 pages_to_keep.add(int(part) - 1)
-        
+
         num_pages = len(reader.pages)
         added_any = False
         for i in sorted(pages_to_keep):
@@ -137,20 +150,23 @@ def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
                 writer.add_page(reader.pages[i])
                 added_any = True
             else:
-                print_err(f"Warning: Page {i + 1} is out of range (PDF has {num_pages} pages).")
-                
+                print_err(
+                    f"Warning: Page {i + 1} is out of range (PDF has {num_pages} pages)."
+                )
+
         if not added_any:
             print_err("Error: No valid pages selected for slicing.")
             sys.exit(2)
-            
+
         dest_path = dest_dir / f"sliced_{file_path.name}"
         with open(dest_path, "wb") as f:
             writer.write(f)
-            
+
         return dest_path
     except Exception as e:
         print_err(f"Error slicing PDF: {e}")
         sys.exit(2)
+
 
 def validate_file(file_path: str) -> Path:
     """Validate that the file exists and has an allowed extension."""
@@ -165,6 +181,7 @@ def validate_file(file_path: str) -> Path:
         )
         sys.exit(2)
     return path
+
 
 T = TypeVar("T")
 
@@ -266,14 +283,13 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
         print_err(f"Warning: Cleanup failed: {e}")
 
 
-
 def process_single_file(
     file_path: Path,
     client: genai.Client,
     model: str,
     hint_type: DocumentType | None,
     args: argparse.Namespace,
-    temp_dir_path: Path
+    temp_dir_path: Path,
 ) -> ExtractionResult | None:
     # 1. Preprocess (Convert .xlsx/.docx to .txt)
     processed_path = preprocess_file(file_path, temp_dir_path)
@@ -283,14 +299,19 @@ def process_single_file(
         if processed_path.suffix.lower() == ".pdf":
             processed_path = slice_pdf(processed_path, args.pages, temp_dir_path)
         else:
-            print_err(f"Warning: --pages only applies to PDF files. Ignoring for {processed_path.name}")
+            print_err(
+                f"Warning: --pages only applies to PDF files. Ignoring for {processed_path.name}"
+            )
 
-    # 3. Extract text locally if requested
+    # 3. Extract text locally unless skipped
     text_context: str | None = None
-    if args.use_liteparse:
+    if not args.skip_liteparse:
         try:
             from liteparse import LiteParse
-            print_err(f"Extracting local text context for {processed_path.name} via liteparse...")
+
+            print_err(
+                f"Extracting local text context for {processed_path.name} via liteparse..."
+            )
             lp = LiteParse()
             lp_result = lp.parse(str(processed_path))
             if hasattr(lp_result, "text") and lp_result.text.strip():
@@ -298,7 +319,9 @@ def process_single_file(
             else:
                 print_err("Warning: liteparse returned empty text.")
         except ImportError:
-            print_err("Warning: liteparse is not installed. Skipping local text extraction.")
+            print_err(
+                "Warning: liteparse is not installed. Skipping local text extraction."
+            )
         except Exception as e:
             print_err(f"Warning: liteparse extraction failed: {e}")
 
@@ -328,7 +351,9 @@ def process_single_file(
                 payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
             except pydantic.ValidationError as e:
                 if args.debug:
-                    print_err(f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n")
+                    print_err(
+                        f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n"
+                    )
                 raise e
 
         return ExtractionResult(
@@ -339,7 +364,9 @@ def process_single_file(
         )
 
     except genai_errors.APIError as e:
-        print_err(f"Error processing {file_path.name}: API failure after {MAX_RETRIES} retries (HTTP {e.code}): {e.message}")
+        print_err(
+            f"Error processing {file_path.name}: API failure after {MAX_RETRIES} retries (HTTP {e.code}): {e.message}"
+        )
         return None
     except Exception as e:
         print_err(f"Error processing {file_path.name}: {e}")
@@ -350,14 +377,31 @@ def process_single_file(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Document extraction engine using Google Gemini models.")
+    parser = argparse.ArgumentParser(
+        description="Document extraction engine using Google Gemini models."
+    )
     parser.add_argument("file_path", nargs="?", help="Local file path")
     parser.add_argument("--url", help="Remote URL to download and extract")
-    parser.add_argument("--type", help="Skip pass 1 and use the supplied document type directly")
-    parser.add_argument("--use-liteparse", action="store_true", help="Use liteparse for local text extraction")
-    parser.add_argument("--output", help="Write JSON directly to this file instead of stdout")
-    parser.add_argument("--pages", help="Pages to extract (e.g., '1-3' or '1,3,5'). Only applies to PDFs.")
-    parser.add_argument("--debug", action="store_true", help="Dump raw LLM response string on validation failure")
+    parser.add_argument(
+        "--type", help="Skip pass 1 and use the supplied document type directly"
+    )
+    parser.add_argument(
+        "--skip-liteparse",
+        action="store_true",
+        help="Skip liteparse local text extraction (vision-only)",
+    )
+    parser.add_argument(
+        "--output", help="Write JSON directly to this file instead of stdout"
+    )
+    parser.add_argument(
+        "--pages",
+        help="Pages to extract (e.g., '1-3' or '1,3,5'). Only applies to PDFs.",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Dump raw LLM response string on validation failure",
+    )
 
     args = parser.parse_args()
 
@@ -389,14 +433,16 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
-        
+
         client = genai.Client(api_key=api_key)
 
         files_to_process = []
         if args.url:
             file_path = download_url(args.url, temp_dir_path)
             if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                print_err(f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+                print_err(
+                    f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                )
                 sys.exit(2)
             files_to_process.append(file_path)
         else:
@@ -404,19 +450,23 @@ def main() -> None:
             if not input_path.exists():
                 print_err(f"Error: Path not found: {input_path}")
                 sys.exit(2)
-            
+
             if input_path.is_dir():
                 for f in input_path.iterdir():
                     if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
                         files_to_process.append(f)
                 if not files_to_process:
-                    print_err(f"Error: No supported files found in directory {input_path}")
+                    print_err(
+                        f"Error: No supported files found in directory {input_path}"
+                    )
                     sys.exit(2)
                 # Sort files to ensure deterministic output order
                 files_to_process.sort()
             else:
                 if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                    print_err(f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+                    print_err(
+                        f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                    )
                     sys.exit(2)
                 files_to_process.append(input_path)
 
@@ -429,6 +479,7 @@ def main() -> None:
                 results.append(res_dict)
 
         import json
+
         if len(results) == 1:
             output_json = json.dumps(results[0], indent=2)
         else:
@@ -444,6 +495,7 @@ def main() -> None:
         if not results:
             print_err("No files were successfully processed.")
             sys.exit(3)
+
 
 if __name__ == "__main__":
     main()

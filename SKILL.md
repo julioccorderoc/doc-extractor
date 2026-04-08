@@ -36,21 +36,21 @@ The invocation is: `/doc-extractor <path> [options]`
 
 - `<path>` / `--url <URL>` — required. Provide either a local file path, a directory path (for batch processing all supported files within), or a remote URL to download.
 - `--type TYPE` — optional. If you already know the document type, pass it here to skip the classification pass. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
-- `--use-liteparse` — optional. Extract local text for a hybrid extraction pipeline to reduce numeric hallucinations.
+- `--skip-liteparse` — optional. Disable the local text extraction hybrid pipeline and rely strictly on the vision model (not recommended, increases numeric hallucinations).
 - `--output <file.json>` — optional. Write the JSON directly to the specified file instead of stdout. Recommended for large payloads to bypass terminal capture limits.
 - `--pages "<spec>"` — optional. Slice the PDF to specific pages before extraction (e.g., `"1-3"`, `"1,3,5"`). Only applies to PDF files.
 - `--debug` — optional. Dump the raw LLM response string to stderr if JSON schema validation fails.
 
 ## Execution
 
-For best results and to eliminate numeric hallucinations (especially on dense tabular data like COAs and Invoices), use the hybrid extraction pipeline flag (`--use-liteparse`). This processes the document's text locally and passes it to the vision model in-memory.
+For best results and to eliminate numeric hallucinations (especially on dense tabular data like COAs and Invoices), the hybrid extraction pipeline (Vision + Local Text) runs by default. You can opt-out by passing `--skip-liteparse`.
 
 ```bash
-# Recommended: Hybrid extraction (Vision + Local Text)
-python ${SKILL_DIR}/scripts/parse_vision.py "<path>" --use-liteparse
+# Recommended: Hybrid extraction (Runs by default)
+python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
 
 # Batch process an entire directory
-python ${SKILL_DIR}/scripts/parse_vision.py "path/to/folder" --use-liteparse
+python ${SKILL_DIR}/scripts/parse_vision.py "path/to/folder"
 
 # Without type hint (two-pass: classify then extract)
 python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
