@@ -42,9 +42,13 @@ The skill resides at the repo root (the repo IS the publishable skill, agnostic 
 
 ### 3.3 The Technical Workflow
 
-1. **Input:** Agent calls `python parse_vision.py <absolute_file_path>`.
-2. **File Handling:**
-    - Validate file extension (must be `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`).
+1. **Input:** Agent calls `python scripts/parse_vision.py <path> [options]`.
+2. **File Handling & Preprocessing:**
+    - If `--url` is provided, download to a temporary directory.
+    - If the input is a directory, batch process all supported files within it.
+    - Validate file extension (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.xlsx`, `.docx`, `.csv`, `.md`, `.txt`).
+    - If the file is an Office/CSV document, seamlessly preprocess it into a Markdown text file using MarkItDown.
+    - If `--pages` is provided (for PDFs), slice the PDF to the target pages.
     - Upload via `client.files.upload(file=path)`.
     - Poll: Check `file.state` until it transitions from `PROCESSING` to `ACTIVE`.
 3. **Inference:**
@@ -81,9 +85,9 @@ All extracted dates must be in the `YYYY-MM-DD` format.
 ## 5. Error Handling & Edge Cases
 
 - **Missing API Key:** Print actionable error `export GEMINI_DOC_EXTRACTOR_KEY='...'` and `sys.exit(1)`. Agent will relay this to user.
-- **Unsupported File Type:** Script detects `.docx`/`.xlsx` → `sys.exit(2)`. Agent instructs user: "The doc-extractor only supports PDFs and Images. Please convert the file."
+- **Unsupported File Type:** Script detects an unsupported extension (e.g., `.exe`) → `sys.exit(2)`. Agent instructs user: "The doc-extractor only supports PDFs, Images, and Office documents. Please convert the file."
 - **API Timeout/Rate Limit:** Implement exponential backoff in the python script (retries = 3). If it fails, `sys.exit(3)`. Agent logs: "Google API is currently rate-limited. Retrying later."
-- **Unreadable Document:** If the model cannot identify the document, it must return `"document_type": "UNKNOWN"` and populate `"raw_text_fallback"`. The agent will flag this for human review.
+- **Unreadable Document:** If the model cannot identify the document, it must return `"document_type": "UNKNOWN"` and populate `"raw_text_fallback"` and generic tables. The agent will flag this for human review.
 
 ## 6. Success Metrics
 
