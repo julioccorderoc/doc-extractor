@@ -56,6 +56,12 @@ Today's date is {today}.
 
 This document has been classified as {doc_type.value}. Extract data strictly according to the provided JSON schema.
 {conflict_resolution}
+NORMALIZATION RULES:
+- Typography: Replace all smart/curly quotes (” “ ’ ‘) with standard straight quotes (" ').
+- Units Formatting: Standardize dimensional units to use standard shorthand (e.g., convert `0.125 in.` or `0.125 inch` to `0.125"`).
+- Spacing: Remove arbitrary extra spaces in version numbers, identifiers, and lot numbers (e.g., `V. 3` -> `V.3`).
+- Dates: Always ensure dates are formatted strictly as YYYY-MM-DD.
+
 GENERAL RULES:
 - Extract exactly what the document says. Do not infer or fabricate data.
 - If a field cannot be found, set it to null (or empty list for arrays).

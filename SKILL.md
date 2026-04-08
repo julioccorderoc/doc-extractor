@@ -24,11 +24,11 @@ Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
 
 ## MANDATORY RESTRICTIONS - DO NOT VIOLATE
 
-1. **ONLY use the script** - Execute the script `python scripts/parse_vision.py`
-2. **NEVER parse documents directly** - Do NOT try to extract text using built-in vision or any other method
-3. **NEVER offer alternatives** - Do NOT suggest "I can try to analyze it" or similar
-4. **IF SCRIPT FAILS** - Follow the exit code handling rules below and STOP.
-5. **NO fallback methods** - Do NOT attempt text extraction any other way
+1. ONLY use the script - Execute the script `python scripts/parse_vision.py`
+2. NEVER parse documents directly - Do NOT try to extract text using built-in vision or any other method
+3. NEVER offer alternatives - Do NOT suggest "I can try to analyze it" or similar
+4. IF SCRIPT FAILS - Follow the exit code handling rules below and STOP.
+5. NO fallback methods - Do NOT attempt text extraction any other way
 
 ## Arguments
 
@@ -40,7 +40,6 @@ The invocation is: `/doc-extractor <path> [options]`
 - `--output <file.json>` — optional. Write the JSON directly to the specified file instead of stdout. Recommended for large payloads to bypass terminal capture limits.
 - `--pages "<spec>"` — optional. Slice the PDF to specific pages before extraction (e.g., `"1-3"`, `"1,3,5"`). Only applies to PDF files.
 - `--debug` — optional. Dump the raw LLM response string to stderr if JSON schema validation fails.
-
 
 ## Execution
 

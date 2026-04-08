@@ -31,7 +31,8 @@ class LabelProofPayload(BaseModel):
     )
     barcode: Optional[str] = Field(default=None, description="Barcode or FNSKU")
     version: Optional[str] = Field(
-        default=None, description="Label version or revision"
+        default=None,
+        description="Label version or revision. Must always be prefixed with 'FNSKU ' or 'REV ' (e.g. 'REV V.3' or 'FNSKU V.3').",
     )
     count: Optional[int] = Field(
         default=None, description="Number of units per container"
