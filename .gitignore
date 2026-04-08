@@ -15,4 +15,8 @@ test_docs/
 .DS_Store
 evals/
 eng.traineddata
+.github/workflows/
+experiments/
+tests/
+fix_snapshot_timeout.sh
 

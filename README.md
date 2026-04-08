@@ -105,6 +105,7 @@ uv run python scripts/parse_vision.py <path_or_url> [options]
 ```
 
 **Options:**
+
 - `--url <URL>`: Download a remote document to a temporary file before extraction.
 - `--type TYPE`: Skip the classification pass and go straight to extraction. Useful when the caller already knows the document type. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
 - `--use-liteparse`: Triggers a hybrid extraction pipeline that locally extracts deterministic OCR text from the document and appends it to the Gemini prompt context. This drastically reduces numeric hallucinations on dense tabular data (like COAs and Invoices).
