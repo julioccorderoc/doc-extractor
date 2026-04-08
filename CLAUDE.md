@@ -1,6 +1,6 @@
 # doc-extractor
 
-A skill that extracts structured JSON from supply chain documents (PDFs, images) using Google's Gemini/Gemma models. Agnostic to the invoking agent (Claude Code, Gemini, OpenCode, etc.).
+A skill that extracts structured JSON from supply chain documents (PDFs, images) using Google's Gemini models. Agnostic to the invoking agent (Claude Code, Gemini, OpenCode, etc.).
 
 ## Project Structure
 
@@ -94,7 +94,7 @@ After every session or significant change:
 Changing the model is a one-line env var change:
 
 ```bash
-export GEMINI_MODEL="gemma-4-26b-a4b-it"  # Switch to Gemma 4
+export GEMINI_MODEL="gemini-2.5-flash"  # Switch to Flash
 ```
 
 No code changes required. All models use the same `google-genai` SDK surface.

@@ -1,4 +1,4 @@
-"""Document extraction engine using Google Gemini/Gemma models.
+"""Document extraction engine using Google Gemini models.
 
 Two-pass extraction:
   Pass 1 — classify the document type (cheap, small schema)
@@ -336,7 +336,7 @@ def process_single_file(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Document extraction engine using Google Gemini/Gemma models.")
+    parser = argparse.ArgumentParser(description="Document extraction engine using Google Gemini models.")
     parser.add_argument("file_path", nargs="?", help="Local file path")
     parser.add_argument("--url", help="Remote URL to download and extract")
     parser.add_argument("--type", help="Skip pass 1 and use the supplied document type directly")
@@ -364,26 +364,14 @@ def main() -> None:
 
     # Determine model and API key
     model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
-    is_gemma = model.lower().startswith("gemma")
-    if is_gemma:
-        api_key = os.environ.get("GEMMA_FREE_API")
-        if not api_key:
-            print_err(
-                f"Error: GEMMA_FREE_API is not set (required for Gemma models).\n"
-                f"Gemma models only work on free-tier accounts. Get a free key at\n"
-                f"https://aistudio.google.com/apikey and run:\n"
-                f"  export GEMMA_FREE_API='your-free-key-here'"
-            )
-            sys.exit(1)
-    else:
-        api_key = os.environ.get("GEMINI_DOC_EXTRACTOR_KEY")
-        if not api_key:
-            print_err(
-                "Error: GEMINI_DOC_EXTRACTOR_KEY is not set.\n"
-                "Get a key at https://aistudio.google.com/apikey and run:\n"
-                "  export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'"
-            )
-            sys.exit(1)
+    api_key = os.environ.get("GEMINI_DOC_EXTRACTOR_KEY")
+    if not api_key:
+        print_err(
+            "Error: GEMINI_DOC_EXTRACTOR_KEY is not set.\n"
+            "Get a key at https://aistudio.google.com/apikey and run:\n"
+            "  export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'"
+        )
+        sys.exit(1)
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)

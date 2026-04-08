@@ -167,7 +167,8 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
 
 ### EPIC-007: Gemma 4 Support
 
-- **Status:** `Pending`
+- **Status:** `Cancelled`
+- **Note:** Deprecated due to API limitations. Gemma models reject structured output via response_schema and are restricted to free-tier accounts, making them incompatible with our production extraction pipeline.
 - **Dependencies:** EPIC-006
 - **Business Objective:** Enable Gemma 4 models as a free-tier alternative to
   Gemini, eliminating per-token cost while maintaining extraction quality.
@@ -203,8 +204,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
 - **Models to benchmark:**
   1. `gemini-3.1-pro-preview` — highest quality, most expensive (baseline)
   2. `gemini-2.5-flash` — default, good quality, low cost
-  3. `gemma-4-26b-a4b-it` — free tier, large model
-- **Technical Boundary:**
+  - **Technical Boundary:**
   - Seed snapshots for all four models (`--model` flag, one run each)
   - Run `compare-models` for each model against the Pro baseline
   - Document field-match % and misclassification count per model
@@ -370,7 +370,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
 
 ### EPIC-016: Format Preprocessing Layer (.xlsx/.docx to .pdf)
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-015
 - **Business Objective:** Expand the supported file types to include Office documents (Excel, Word) which are extremely common in supply chain quotes and specifications.
 - **Context:** Gemini Vision cannot natively process `.xlsx` or `.docx` files. We need a local conversion or text-extraction layer to bridge this gap.
@@ -385,7 +385,7 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
 
 ### EPIC-017: Batch Directory Processing
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-015
 - **Business Objective:** Enable agents to process bulk document dumps (e.g., "extract all 50 invoices from this folder") in a single command.
 - **Context:** Currently the script only accepts a single file path. Looping in bash is error-prone for agents.

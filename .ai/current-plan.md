@@ -10,7 +10,10 @@
   - Added `--pages` flag utilizing `pypdf` to slice multipage PDFs, avoiding max-token limits on massive documents.
   - Added `--debug` flag to dump raw LLM responses to stderr when Pydantic `ValidationError` occurs.
   - Updated `SKILL.md` to detail these arguments.
-  - All unit tests pass.
+- **EPIC-016 (Format Preprocessing)**:
+  - Integrated `markitdown` library to dynamically preprocess `.csv`, `.xlsx`, and `.docx` files into Markdown files to support non-image/PDF formats.
+- **EPIC-017 (Batch Directory Processing)**:
+  - Refactored `parse_vision.py` to support directory input (`python scripts/parse_vision.py <directory_path>`), automatically iterating over all supported files and returning a combined JSON array.
 
 ## What Was Done (Previous)
 - **Schema Normalization**: Standardized `vendor_product_id` and `buyer_product_id` across all relevant schemas (`_coa`, `_invoice`, `_quote`, `_product_spec`, `_packaging_spec`, `_label_proof`, `_label_order_ack`) to ensure robust ERP integration mapping.
@@ -38,14 +41,12 @@
 
 ## Blockers Discovered
 
-- **Gemma HTTP 400:** `response_schema` / `response_mime_type="application/json"` are Gemini-only. Gemma rejects them. Needs a separate extraction path (EPIC-007).
-- **Gemma paid account restriction:** Google blocks Gemma on paid API keys. `GEMMA_FREE_API` env var is wired up but useless until the structured-output blocker is fixed.
+- None at this time.
 
 ## What's Next
 - Re-run the baseline test corpus using `uv run python evals/snapshot.py --model gemini-2.5-flash approve --all`.
 - Re-run the candidate test corpus using `uv run python evals/snapshot.py --model gemini-3.1-pro-preview approve --all`.
 - Run the cross-model diff using `uv run python evals/snapshot.py compare-models gemini-2.5-flash gemini-3.1-pro-preview` to validate the new schemas and generic fallback behavior.
-- Address the Gemma 4 free-tier constraints (EPIC-007).
 
 ## Key Decisions Made
 
