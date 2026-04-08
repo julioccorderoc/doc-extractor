@@ -1,6 +1,6 @@
 ---
 name: doc-extractor
-description: Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP) using Google Gemini. Invoke when the user runs /doc-extractor <path> or asks to extract or parse a supply chain document.
+description: Extract structured JSON from supply chain documents (PDF, PNG, JPG, WEBP) or an entire directory of documents using Google Gemini. Invoke when the user runs /doc-extractor <path> or asks to extract or parse a supply chain document or directory.
 compatibility: Requires Python 3.13+ and the GEMINI_DOC_EXTRACTOR_KEY environment variable.
 author: julioccorderoc
 version: "0.1.0"
@@ -20,7 +20,7 @@ allowed-tools:
 
 # doc-extractor
 
-Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
+Extract structured JSON from a supply chain document or batch process a directory (PDF, PNG, JPG, WEBP).
 
 ## MANDATORY RESTRICTIONS - DO NOT VIOLATE
 
@@ -34,7 +34,7 @@ Extract structured JSON from a supply chain document (PDF, PNG, JPG, WEBP).
 
 The invocation is: `/doc-extractor <path> [options]`
 
-- `<path>` / `--url <URL>` — required. Provide either a local file path or a remote URL to download.
+- `<path>` / `--url <URL>` — required. Provide either a local file path, a directory path (for batch processing all supported files within), or a remote URL to download.
 - `--type TYPE` — optional. If you already know the document type, pass it here to skip the classification pass. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
 - `--use-liteparse` — optional. Extract local text for a hybrid extraction pipeline to reduce numeric hallucinations.
 - `--output <file.json>` — optional. Write the JSON directly to the specified file instead of stdout. Recommended for large payloads to bypass terminal capture limits.
@@ -48,6 +48,9 @@ For best results and to eliminate numeric hallucinations (especially on dense ta
 ```bash
 # Recommended: Hybrid extraction (Vision + Local Text)
 python ${SKILL_DIR}/scripts/parse_vision.py "<path>" --use-liteparse
+
+# Batch process an entire directory
+python ${SKILL_DIR}/scripts/parse_vision.py "path/to/folder" --use-liteparse
 
 # Without type hint (two-pass: classify then extract)
 python ${SKILL_DIR}/scripts/parse_vision.py "<path>"
