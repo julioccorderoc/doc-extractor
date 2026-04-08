@@ -47,7 +47,7 @@ from schemas import (
     PAYLOAD_SCHEMA_MAP,
 )
 
-ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".docx", ".txt", ".md", ".csv"}
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 MAX_RETRIES = 3
 RETRYABLE_CODES = {429, 500, 503}
@@ -59,20 +59,26 @@ def print_err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-def validate_file(file_path: str) -> Path:
-    """Validate that the file exists and has an allowed extension."""
-    path = Path(file_path)
-    if not path.exists():
-        print_err(f"Error: File not found: {file_path}")
-        sys.exit(2)
-    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
-        print_err(
-            f"Error: Unsupported file type '{path.suffix}'. "
-            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-        )
-        sys.exit(2)
-    return path
 
+def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
+    """Convert unsupported formats (.xlsx, .docx, .csv) to markdown text using MarkItDown."""
+    if file_path.suffix.lower() in {".xlsx", ".docx", ".csv"}:
+        print_err(f"Converting {file_path.suffix} to markdown via MarkItDown...")
+        try:
+            from markitdown import MarkItDown
+            md = MarkItDown()
+            result = md.convert(str(file_path))
+            md_path = temp_dir / f"{file_path.stem}.txt"
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(result.text_content)
+            return md_path
+        except ImportError:
+            print_err("Error: markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)")
+            sys.exit(2)
+        except Exception as e:
+            print_err(f"Error converting file: {e}")
+            sys.exit(2)
+    return file_path
 
 
 def download_url(url: str, dest_dir: Path) -> Path:
@@ -246,6 +252,89 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
         print_err(f"Warning: Cleanup failed: {e}")
 
 
+
+def process_single_file(
+    file_path: Path,
+    client: genai.Client,
+    model: str,
+    hint_type: DocumentType | None,
+    args: argparse.Namespace,
+    temp_dir_path: Path
+) -> ExtractionResult | None:
+    # 1. Preprocess (Convert .xlsx/.docx to .txt)
+    processed_path = preprocess_file(file_path, temp_dir_path)
+
+    # 2. Slice PDF if requested
+    if args.pages:
+        if processed_path.suffix.lower() == ".pdf":
+            processed_path = slice_pdf(processed_path, args.pages, temp_dir_path)
+        else:
+            print_err(f"Warning: --pages only applies to PDF files. Ignoring for {processed_path.name}")
+
+    # 3. Extract text locally if requested
+    text_context: str | None = None
+    if args.use_liteparse:
+        try:
+            from liteparse import LiteParse
+            print_err(f"Extracting local text context for {processed_path.name} via liteparse...")
+            lp = LiteParse()
+            lp_result = lp.parse(str(processed_path))
+            if hasattr(lp_result, "text") and lp_result.text.strip():
+                text_context = lp_result.text
+            else:
+                print_err("Warning: liteparse returned empty text.")
+        except ImportError:
+            print_err("Warning: liteparse is not installed. Skipping local text extraction.")
+        except Exception as e:
+            print_err(f"Warning: liteparse extraction failed: {e}")
+
+    uploaded_file = None
+    try:
+        uploaded_file = with_retry(upload_file, client, processed_path)
+        uploaded_file = wait_for_processing(client, uploaded_file)
+
+        # Pass 1 — classify
+        if hint_type is not None:
+            doc_type = hint_type
+            confidence = 1.0
+            print_err(f"Using caller-supplied type: {doc_type.value}")
+        else:
+            classification = with_retry(classify, client, uploaded_file, model)
+            doc_type = classification.document_type
+            confidence = classification.confidence
+            print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+
+        # Pass 2 — extract with specific schema
+        payload = None
+        if doc_type in PAYLOAD_SCHEMA_MAP:
+            payload_json = with_retry(
+                extract_typed, client, uploaded_file, model, doc_type, text_context
+            )
+            try:
+                payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
+            except pydantic.ValidationError as e:
+                if args.debug:
+                    print_err(f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n")
+                raise e
+
+        return ExtractionResult(
+            document_type=doc_type,
+            confidence=confidence,
+            extracted_date=datetime.date.today().isoformat(),
+            payload=payload,
+        )
+
+    except genai_errors.APIError as e:
+        print_err(f"Error processing {file_path.name}: API failure after {MAX_RETRIES} retries (HTTP {e.code}): {e.message}")
+        return None
+    except Exception as e:
+        print_err(f"Error processing {file_path.name}: {e}")
+        return None
+    finally:
+        if uploaded_file is not None:
+            cleanup(client, uploaded_file)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Document extraction engine using Google Gemini/Gemma models.")
     parser.add_argument("file_path", nargs="?", help="Local file path")
@@ -299,105 +388,60 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
         
-        if args.url:
-            file_path = download_url(args.url, temp_dir_path)
-            # Re-validate extension after download if possible, but skip existence check
-            if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                print_err(
-                    f"Error: Unsupported file type '{file_path.suffix}'. "
-                    f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                )
-                sys.exit(2)
-        else:
-            file_path = validate_file(args.file_path)
-
-        if args.pages:
-            if file_path.suffix.lower() == ".pdf":
-                file_path = slice_pdf(file_path, args.pages, temp_dir_path)
-            else:
-                print_err("Warning: --pages only applies to PDF files. Ignoring.")
-
         client = genai.Client(api_key=api_key)
 
-        # Extract text locally if requested
-        text_context: str | None = None
-        if args.use_liteparse:
-            try:
-                from liteparse import LiteParse
-
-                print_err("Extracting local text context via liteparse...")
-                lp = LiteParse()
-                lp_result = lp.parse(str(file_path))
-                if hasattr(lp_result, "text") and lp_result.text.strip():
-                    text_context = lp_result.text
-                else:
-                    print_err("Warning: liteparse returned empty text.")
-            except ImportError:
-                print_err(
-                    "Warning: liteparse is not installed. Skipping local text extraction."
-                )
-            except Exception as e:
-                print_err(f"Warning: liteparse extraction failed: {e}")
-
-        uploaded_file = None
-        try:
-            uploaded_file = with_retry(upload_file, client, file_path)
-            uploaded_file = wait_for_processing(client, uploaded_file)
-
-            # Pass 1 — classify (skip if caller supplied --type)
-            if hint_type is not None:
-                doc_type = hint_type
-                confidence = 1.0
-                print_err(f"Using caller-supplied type: {doc_type.value}")
-            else:
-                classification = with_retry(classify, client, uploaded_file, model)
-                doc_type = classification.document_type
-                confidence = classification.confidence
-                print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
-
-            # Pass 2 — extract with the specific schema
-            payload = None
-            if doc_type in PAYLOAD_SCHEMA_MAP:
-                payload_json = with_retry(
-                    extract_typed, client, uploaded_file, model, doc_type, text_context
-                )
-                try:
-                    payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
-                except pydantic.ValidationError as e:
-                    if args.debug:
-                        print_err(f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n")
-                    raise e
-
-            result = ExtractionResult(
-                document_type=doc_type,
-                confidence=confidence,
-                extracted_date=datetime.date.today().isoformat(),
-                payload=payload,
-            )
+        files_to_process = []
+        if args.url:
+            file_path = download_url(args.url, temp_dir_path)
+            if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+                print_err(f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+                sys.exit(2)
+            files_to_process.append(file_path)
+        else:
+            input_path = Path(args.file_path)
+            if not input_path.exists():
+                print_err(f"Error: Path not found: {input_path}")
+                sys.exit(2)
             
-            output_json = result.model_dump_json(indent=2)
-            if args.output:
-                with open(args.output, "w") as f:
-                    f.write(output_json)
-                print_err(f"Output successfully written to {args.output}")
+            if input_path.is_dir():
+                for f in input_path.iterdir():
+                    if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
+                        files_to_process.append(f)
+                if not files_to_process:
+                    print_err(f"Error: No supported files found in directory {input_path}")
+                    sys.exit(2)
+                # Sort files to ensure deterministic output order
+                files_to_process.sort()
             else:
-                print(output_json)
+                if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+                    print_err(f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+                    sys.exit(2)
+                files_to_process.append(input_path)
 
-        except genai_errors.APIError as e:
-            print_err(
-                f"Error: API failure after {MAX_RETRIES} retries "
-                f"(HTTP {e.code}): {e.message}"
-            )
+        results = []
+        for fp in files_to_process:
+            res = process_single_file(fp, client, model, hint_type, args, temp_dir_path)
+            if res:
+                res_dict = res.model_dump()
+                res_dict["source_file"] = fp.name
+                results.append(res_dict)
+
+        import json
+        if len(results) == 1:
+            output_json = json.dumps(results[0], indent=2)
+        else:
+            output_json = json.dumps(results, indent=2)
+
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(output_json)
+            print_err(f"Output successfully written to {args.output}")
+        else:
+            print(output_json)
+
+        if not results:
+            print_err("No files were successfully processed.")
             sys.exit(3)
-        except TimeoutError as e:
-            print_err(f"Error: {e}")
-            sys.exit(3)
-        except RuntimeError as e:
-            print_err(f"Error: {e}")
-            sys.exit(3)
-        finally:
-            if uploaded_file is not None:
-                cleanup(client, uploaded_file)
 
 if __name__ == "__main__":
     main()
