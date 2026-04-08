@@ -152,6 +152,20 @@ def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
         print_err(f"Error slicing PDF: {e}")
         sys.exit(2)
 
+def validate_file(file_path: str) -> Path:
+    """Validate that the file exists and has an allowed extension."""
+    path = Path(file_path)
+    if not path.exists():
+        print_err(f"Error: File not found: {file_path}")
+        sys.exit(2)
+    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        print_err(
+            f"Error: Unsupported file type '{path.suffix}'. "
+            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+        sys.exit(2)
+    return path
+
 T = TypeVar("T")
 
 

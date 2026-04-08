@@ -35,7 +35,7 @@ def test_validate_file_exits_2_for_missing_file(tmp_path):
 
 
 def test_validate_file_exits_2_for_unsupported_extension(tmp_path):
-    bad_file = tmp_path / "document.txt"
+    bad_file = tmp_path / "document.exe"
     bad_file.write_text("hello")
     with pytest.raises(SystemExit) as exc:
         parse_vision.validate_file(str(bad_file))
