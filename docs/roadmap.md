@@ -416,6 +416,61 @@
   - Exit code 1 guides agent to check env vars
   - CLAUDE.md reflects `providers/` structure
 
+### EPIC-024: SKILL.md Compression & Batch Docs
+
+- **Status:** `Pending`
+- **Dependencies:** None
+- **Objective:** Reduce SKILL.md token footprint ~30-40%. Document batch output structure.
+- **Context:** SKILL.md loads into agent context on every invocation (~1,200 tokens). Redundancies: "run from skill dir" repeated in MANDATORY + examples, exit code "Action" column restates obvious, multiple similar examples.
+- **Scope:**
+  - Deduplicate "run from skill dir" + "use uv run" (appears in MANDATORY and every example)
+  - Collapse exit code "Action" column into "Meaning" (obvious from context)
+  - Merge similar examples (3 `--output` variants → 1 with inline comments)
+  - Add one line documenting batch output structure: single file → JSON object, directory → JSON array
+  - Target: ~60 lines from ~85
+- **Done when:**
+  - SKILL.md <70 lines
+  - Batch output structure documented
+  - All existing functionality still described (no information loss)
+
+### EPIC-025: Summary Improvements
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-020
+- **Objective:** Richer summaries (filename in all paths, markdown format, summary-only triage mode) to reduce agent token waste from reformatting and unnecessary extraction.
+- **Context:** Agent spends tokens re-presenting summaries as markdown tables. `build_summary()` omits filename in COA/Invoice/Quote paths. Triage workflows ("did everything pass?") don't need full JSON extraction.
+- **Scope:**
+  - Add `filename` as first field in ALL `build_summary()` paths (COA, Invoice, Quote, generic fallback)
+  - `--format markdown` flag — emit summary as markdown table rows (`| file | type | key_info | confidence |`) so agent relays verbatim
+  - `--summary-only` flag — classify via API (1 call), skip extract (pass 2), print summary, exit. No JSON output
+  - Update SKILL.md with new flags
+- **Done when:**
+  - All summary lines include source filename
+  - `--format markdown` emits table rows
+  - `--summary-only` classifies without extracting, prints summary only
+  - `uv run pytest` passes
+
+### EPIC-026: `--schema` Flag (Self-Documenting Schemas)
+
+- **Status:** `Pending`
+- **Dependencies:** EPIC-002
+- **Objective:** Let agents answer "what fields were extracted?" without reading full JSON payloads. Self-documenting schema access via CLI.
+- **Context:** Currently agent must `Read` full JSON file to answer schema questions. Pydantic models already have `.model_json_schema()` — just needs a CLI surface.
+- **Scope:**
+  - `--schema <TYPE>` — resolve from `PAYLOAD_SCHEMA_MAP`, call `.model_json_schema()`, print to stdout, exit
+  - `--schema all` — print all schemas as `{TYPE: schema, ...}`
+  - No API key required for this flag
+  - Brief schema summary in SKILL.md (just field names per type, ~10 lines)
+- **Done when:**
+  - `uv run python scripts/parse_vision.py --schema COA` prints JSON schema without API key
+  - `--schema all` prints all schemas
+  - SKILL.md includes brief field reference
+
 ## Minor Backlog
 
 - [ ] Add `COA_RAW` document type and schema parsing based on PRD
+- [ ] Add `PACKING_LIST` document type and schema
+- [ ] Add `CARRIER_LABEL` document type and schema
+- [ ] Add `BOX_CONTENT_LABEL` document type and schema
+- [ ] Add `BOL` (Bill of Lading) document type and schema
+- [ ] Add `PALLET_LABEL` document type and schema
