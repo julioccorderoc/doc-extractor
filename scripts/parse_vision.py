@@ -54,7 +54,7 @@ from schemas import (
     ExtractionResult,
     PAYLOAD_SCHEMA_MAP,
 )
-from summary import build_summary
+from summary import _md_header, build_summary
 
 __version__ = "0.1.0"
 
@@ -71,6 +71,7 @@ def process_single_file(
     pages: str | None = None,
     skip_liteparse: bool = False,
     debug: bool = False,
+    summary_only: bool = False,
 ) -> ExtractionResult | None:
     # 1. Preprocess (Convert .xlsx/.docx to .txt)
     processed_path = preprocess_file(file_path, temp_dir_path)
@@ -121,6 +122,15 @@ def process_single_file(
             doc_type = classification.document_type
             confidence = classification.confidence
             print_progress(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+
+        # Summary-only mode: skip pass 2 entirely
+        if summary_only:
+            return ExtractionResult(
+                document_type=doc_type,
+                confidence=confidence,
+                extracted_date=datetime.date.today(),
+                payload=None,
+            )
 
         # Pass 2 — extract with specific schema
         payload = None
@@ -218,6 +228,30 @@ def write_output(
         print_err(s)
 
 
+def handle_schema(type_arg: str) -> None:
+    """Print JSON schema for a document type (or all types) to stdout."""
+    if type_arg.lower() == "all":
+        all_schemas = {}
+        for doc_type, model_cls in PAYLOAD_SCHEMA_MAP.items():
+            all_schemas[doc_type.value] = model_cls.model_json_schema()
+        print(json.dumps(all_schemas, indent=2))
+        return
+
+    raw = type_arg.upper()
+    try:
+        doc_type = DocumentType(raw)
+    except ValueError:
+        valid = ", ".join(t.value for t in DocumentType)
+        print_err(f"Error: Unknown type '{raw}'. Valid: {valid}")
+        sys.exit(2)
+
+    if doc_type not in PAYLOAD_SCHEMA_MAP:
+        print_err(f"Error: No schema for type '{raw}' (type exists but has no payload model)")
+        sys.exit(2)
+
+    print(json.dumps(PAYLOAD_SCHEMA_MAP[doc_type].model_json_schema(), indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Document extraction engine using Google Gemini models."
@@ -255,10 +289,29 @@ def main() -> None:
         action="store_true",
         help="Show progress messages on stderr (suppressed by default; warnings and errors always shown)",
     )
+    parser.add_argument(
+        "--format",
+        choices=["plain", "markdown"],
+        default="plain",
+        help="Summary output format: plain (pipe-delimited) or markdown (table row)",
+    )
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Classify only (skip extraction pass 2). Print summaries to stderr, no JSON output",
+    )
+    parser.add_argument(
+        "--schema",
+        help="Print JSON schema for a document type and exit. Use a TYPE name or 'all'.",
+    )
 
     args = parser.parse_args()
 
     set_quiet(not args.verbose)
+
+    if args.schema:
+        handle_schema(args.schema)
+        sys.exit(0)
 
     if not args.file_path and not args.url:
         print_err("Error: Must provide either a local file_path or --url")
@@ -296,13 +349,15 @@ def main() -> None:
         except IngestionError:
             sys.exit(2)
 
+        summary_fmt: str = args.format
         results = []
-        summaries = []
+        summaries: list[str] = []
         for fp in files_to_process:
             try:
                 res = process_single_file(
                     fp, client, model, hint_type, temp_dir_path,
                     pages=args.pages, skip_liteparse=args.skip_liteparse, debug=args.debug,
+                    summary_only=args.summary_only,
                 )
             except IngestionError:
                 continue
@@ -311,13 +366,22 @@ def main() -> None:
                 res_dict["source_file"] = fp.name
                 results.append(res_dict)
                 if not args.no_summary:
-                    summaries.append(build_summary(res, fp.name))
+                    summaries.append(build_summary(res, fp.name, fmt=summary_fmt))
 
         if not results:
             print_err("No files were successfully processed.")
             sys.exit(3)
 
-        write_output(results, summaries, args.output)
+        if args.summary_only:
+            # Print only summaries to stderr, no JSON output
+            if summary_fmt == "markdown" and summaries:
+                print_err(_md_header())
+            for s in summaries:
+                print_err(s)
+        else:
+            if summary_fmt == "markdown" and summaries:
+                summaries.insert(0, _md_header())
+            write_output(results, summaries, args.output)
 
 
 if __name__ == "__main__":
