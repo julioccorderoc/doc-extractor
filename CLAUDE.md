@@ -49,6 +49,10 @@ python scripts/parse_vision.py <absolute_file_path> --type <TYPE>
 # Run evals
 python evals/snapshot.py approve --all   # seed snapshots
 python evals/snapshot.py compare         # regression check
+
+# Maintenance: purge leaked uploads from Google storage (from crashed runs)
+python scripts/cleanup_files.py            # list + delete all
+python scripts/cleanup_files.py --dry-run  # list only, no deletion
 ```
 
 ## Environment Variables
