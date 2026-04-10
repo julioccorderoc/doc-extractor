@@ -13,7 +13,6 @@ metadata:
         - python
     primaryEnv: GEMINI_DOC_EXTRACTOR_KEY
     emoji: "📦"
-disable-model-invocation: true
 allowed-tools:
   - Bash(python *)
 ---
