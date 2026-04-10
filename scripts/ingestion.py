@@ -52,7 +52,7 @@ def validate_file(file_path: str) -> Path:
     return path
 
 
-def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
+def preprocess_file(file_path: Path, dest_dir: Path) -> Path:
     """Convert unsupported formats (.xlsx, .docx, .csv) to markdown text using MarkItDown."""
     if file_path.suffix.lower() in {".xlsx", ".docx", ".csv"}:
         print_progress(f"Converting {file_path.suffix} to markdown via MarkItDown...")
@@ -61,7 +61,7 @@ def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
 
             md = MarkItDown()
             result = md.convert(str(file_path))
-            md_path = temp_dir / f"{file_path.stem}.txt"
+            md_path = dest_dir / f"{file_path.stem}.txt"
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(result.text_content)
             return md_path

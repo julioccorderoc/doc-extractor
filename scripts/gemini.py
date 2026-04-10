@@ -12,11 +12,7 @@ from google.genai.types import GenerateContentConfig
 
 from _output import print_err, print_progress
 from prompts import build_classification_prompt, build_extraction_prompt_for_type
-from schemas import (
-    ClassificationResult,
-    DocumentType,
-    PAYLOAD_SCHEMA_MAP,
-)
+from schemas import ClassificationResult, DocumentType
 
 MAX_RETRIES = 3
 RETRYABLE_CODES = {429, 500, 503}
@@ -90,11 +86,11 @@ def extract_typed(
     uploaded_file: genai.types.File,
     model: str,
     doc_type: DocumentType,
+    payload_class: type,
     text_context: str | None = None,
 ) -> str:
     """Pass 2: extract payload using the exact schema for the classified type."""
     print_progress(f"Pass 2: extracting {doc_type.value} fields...")
-    payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
 
     contents = [
         build_extraction_prompt_for_type(doc_type, has_text_context=bool(text_context)),

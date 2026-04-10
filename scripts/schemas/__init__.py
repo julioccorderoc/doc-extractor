@@ -44,7 +44,7 @@ from ._quote import (
     QuotedItem,
     QuoteTechnicalDetail,
 )
-from ._shared import CompanyInfo, FormulaComponent, SupplementsFact, TechnicalLabelSpecs
+from ._shared import CompanyInfo, FormulaComponent, SpecSheetHeader, SupplementsFact, TechnicalLabelSpecs
 
 __all__ = [
     # Enums
@@ -83,6 +83,7 @@ __all__ = [
     # Shared
     "CompanyInfo",
     "FormulaComponent",
+    "SpecSheetHeader",
     "SupplementsFact",
     "TechnicalLabelSpecs",
     # Generic

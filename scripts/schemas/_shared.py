@@ -34,6 +34,41 @@ class CompanyInfo(BaseModel):
     phone: Optional[str] = Field(default=None, description="Contact phone")
 
 
+class SpecSheetHeader(BaseModel):
+    """Common header fields shared by product and packaging spec sheets."""
+
+    date: Optional[str] = Field(
+        default=None, description="Document date in YYYY-MM-DD format"
+    )
+    version: Optional[str] = Field(
+        default=None,
+        description="Document version or revision number (e.g. 'Rev 1', 'v2')",
+    )
+    manufacturer_name: Optional[str] = Field(
+        default=None, description="Manufacturer or company name"
+    )
+    product_name: Optional[str] = Field(default=None, description="Product name")
+    vendor_product_id: Optional[str] = Field(
+        default=None, description="Product code or SKU used by the vendor/manufacturer"
+    )
+    buyer_product_id: Optional[str] = Field(
+        default=None, description="Product code or SKU used by the buyer"
+    )
+    product_description: Optional[str] = Field(
+        default=None, description="Product description"
+    )
+    count: Optional[int] = Field(
+        default=None, description="Number of units per container"
+    )
+    count_unit: Optional[str] = Field(
+        default=None,
+        description="Unit type for count (e.g. 'capsule', 'tablet', 'softgel', 'gummy')",
+    )
+    servings: Optional[int] = Field(
+        default=None, description="Number of servings per container"
+    )
+
+
 class TechnicalLabelSpecs(BaseModel):
     label_size: Optional[str] = Field(
         default=None,

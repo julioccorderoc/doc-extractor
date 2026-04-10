@@ -125,11 +125,12 @@ def process_single_file(
         # Pass 2 — extract with specific schema
         payload = None
         if doc_type in PAYLOAD_SCHEMA_MAP:
+            payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
             payload_json = with_retry(
-                extract_typed, client, uploaded_file, model, doc_type, text_context
+                extract_typed, client, uploaded_file, model, doc_type, payload_class, text_context
             )
             try:
-                payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
+                payload = payload_class.model_validate_json(payload_json)
             except pydantic.ValidationError as e:
                 if debug:
                     print_err(
@@ -149,12 +150,72 @@ def process_single_file(
             f"Error processing {file_path.name}: API failure after retries (HTTP {e.code}): {e.message}"
         )
         return None
+    except pydantic.ValidationError as e:
+        print_err(
+            f"Error processing {file_path.name}: LLM response failed schema validation: {e}"
+        )
+        return None
     except Exception as e:
         print_err(f"Error processing {file_path.name}: {e}")
         return None
     finally:
         if uploaded_file is not None:
             cleanup(client, uploaded_file)
+
+
+def build_files_to_process(
+    args: argparse.Namespace, temp_dir_path: Path,
+) -> list[Path]:
+    """Resolve CLI inputs (file, directory, or URL) into a list of extractable file paths."""
+    if args.url:
+        file_path = download_url(args.url, temp_dir_path)
+        if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+            print_err(
+                f"Error: Unsupported file type '{file_path.suffix}'. "
+                f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+            sys.exit(2)
+        return [file_path]
+
+    input_path = Path(args.file_path)
+    if not input_path.exists():
+        print_err(f"Error: Path not found: {input_path}")
+        sys.exit(2)
+
+    if input_path.is_dir():
+        files = sorted(
+            f for f in input_path.iterdir()
+            if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS
+        )
+        if not files:
+            print_err(f"Error: No supported files found in directory {input_path}")
+            sys.exit(2)
+        return files
+
+    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        print_err(
+            f"Error: Unsupported file type '{input_path.suffix}'. "
+            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+        sys.exit(2)
+    return [input_path]
+
+
+def write_output(
+    results: list[dict], summaries: list[str], output_path: str | None,
+) -> None:
+    """Serialize extraction results to stdout or a file, then print summaries."""
+    output_json = json.dumps(results[0] if len(results) == 1 else results, indent=2)
+
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(output_json)
+        print_progress(f"Output written to {output_path}")
+    else:
+        print(output_json)
+
+    for s in summaries:
+        print_err(s)
 
 
 def main() -> None:
@@ -231,39 +292,7 @@ def main() -> None:
         client = genai.Client(api_key=api_key)
 
         try:
-            files_to_process = []
-            if args.url:
-                file_path = download_url(args.url, temp_dir_path)
-                if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                    print_err(
-                        f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                    )
-                    sys.exit(2)
-                files_to_process.append(file_path)
-            else:
-                input_path = Path(args.file_path)
-                if not input_path.exists():
-                    print_err(f"Error: Path not found: {input_path}")
-                    sys.exit(2)
-
-                if input_path.is_dir():
-                    for f in input_path.iterdir():
-                        if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
-                            files_to_process.append(f)
-                    if not files_to_process:
-                        print_err(
-                            f"Error: No supported files found in directory {input_path}"
-                        )
-                        sys.exit(2)
-                    # Sort files to ensure deterministic output order
-                    files_to_process.sort()
-                else:
-                    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                        print_err(
-                            f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                        )
-                        sys.exit(2)
-                    files_to_process.append(input_path)
+            files_to_process = build_files_to_process(args, temp_dir_path)
         except IngestionError:
             sys.exit(2)
 
@@ -288,21 +317,7 @@ def main() -> None:
             print_err("No files were successfully processed.")
             sys.exit(3)
 
-        if len(results) == 1:
-            output_json = json.dumps(results[0], indent=2)
-        else:
-            output_json = json.dumps(results, indent=2)
-
-        if args.output:
-            with open(args.output, "w", encoding="utf-8") as f:
-                f.write(output_json)
-            print_progress(f"Output written to {args.output}")
-        else:
-            print(output_json)
-
-        if summaries:
-            for s in summaries:
-                print_err(s)
+        write_output(results, summaries, args.output)
 
 
 if __name__ == "__main__":

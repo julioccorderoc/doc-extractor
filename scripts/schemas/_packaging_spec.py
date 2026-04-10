@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from ._shared import SpecSheetHeader
+
 
 class ExtraPackagingComponent(BaseModel):
     component_name: str = Field(
@@ -83,37 +85,7 @@ class LabelSpecs(BaseModel):
     )
 
 
-class PackagingSpecSheetPayload(BaseModel):
-    date: Optional[str] = Field(
-        default=None, description="Document date in YYYY-MM-DD format"
-    )
-    version: Optional[str] = Field(
-        default=None,
-        description="Document version or revision number (e.g. 'Rev 1', 'v2')",
-    )
-    manufacturer_name: Optional[str] = Field(
-        default=None, description="Manufacturer or company name"
-    )
-    product_name: Optional[str] = Field(default=None, description="Product name")
-    vendor_product_id: Optional[str] = Field(
-        default=None, description="Product code or SKU used by the vendor/manufacturer"
-    )
-    buyer_product_id: Optional[str] = Field(
-        default=None, description="Product code or SKU used by the buyer"
-    )
-    product_description: Optional[str] = Field(
-        default=None, description="Product description"
-    )
-    count: Optional[int] = Field(
-        default=None, description="Number of units per container"
-    )
-    count_unit: Optional[str] = Field(
-        default=None,
-        description="Unit type (e.g. 'capsule', 'tablet', 'softgel')",
-    )
-    servings: Optional[int] = Field(
-        default=None, description="Number of servings per container"
-    )
+class PackagingSpecSheetPayload(SpecSheetHeader):
     packaging_components: PackagingComponents = Field(
         default_factory=PackagingComponents,
         description="Normalized packaging components",
