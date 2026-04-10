@@ -400,6 +400,66 @@ The `test_docs/` folder contains a comprehensive test corpus of PDFs and images 
   - Non-supported files in the directory are safely skipped.
   - At least one file failing API extraction does not crash the entire batch process.
 
+### EPIC-018: SKILL.md `uv run` Migration & Alignment
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-005
+- **Business Objective:** Fix critical first-run failure where agents following SKILL.md literally get `ModuleNotFoundError` because SKILL.md used bare `python` instead of `uv run`. Also resolves the liteparse silent-skip issue (deps come from `pyproject.toml`) and aligns SKILL.md with CLAUDE.md.
+- **Technical Boundary:**
+  - Update all execution examples in SKILL.md from `python ${SKILL_DIR}/scripts/parse_vision.py` to `cd ${SKILL_DIR} && uv run python scripts/parse_vision.py`
+  - Add `uv` to `requires.bins` and `compatibility` frontmatter
+  - Update `allowed-tools` to permit `Bash(cd * && uv run *)` and `Bash(uv run *)`
+  - Add working directory guidance in the execution section
+- **Verification Criteria (Definition of Done):**
+  - All SKILL.md examples use `uv run`
+  - `allowed-tools` includes `Bash(cd * && uv run *)` and `Bash(uv run *)`
+  - `compatibility` mentions `uv`
+
+### EPIC-019: Fix `model_dump` JSON Serialization Bug
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-002
+- **Business Objective:** Fix crash where `json.dumps()` raises `TypeError: Object of type date is not JSON serializable` after successful extraction, caused by `res.model_dump()` returning native `datetime.date` objects.
+- **Technical Boundary:**
+  - Change `res.model_dump()` to `res.model_dump(mode="json")` in `parse_vision.py`
+  - Add unit test confirming date fields serialize correctly through `json.dumps()`
+- **Verification Criteria (Definition of Done):**
+  - `uv run pytest` passes with new serialization test
+  - Extraction of documents with `extracted_date` produces valid JSON without crashing
+
+### EPIC-020: `--summary` Flag & Token-Efficient Response Format
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-015, EPIC-018
+- **Business Objective:** Reduce agent token consumption per extraction by ~60%. Agents no longer need to ingest full JSON to report results — a compact one-line summary per document is printed to stderr.
+- **Technical Boundary:**
+  - Add `--summary` flag to `parse_vision.py`
+  - Implement `build_summary()` function with type-specific formatting:
+    - COA: `COA | {lot} | {product} | {pass}/{total} PASS | confidence={conf}`
+    - Invoice: `INVOICE | #{num} | {vendor} | {items} items | ${total} | confidence={conf}`
+    - Generic fallback for all other types
+  - Update SKILL.md to default to `--output` + `--summary` pattern
+  - Rewrite Success Response Format: save JSON to file, relay summary, tell user the file path
+- **Verification Criteria (Definition of Done):**
+  - `--summary` prints compact summaries to stderr
+  - SKILL.md no longer instructs agents to display raw JSON
+
+### EPIC-021: `--quiet` Flag & Dead Code Cleanup
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-018
+- **Business Objective:** Eliminate ~12 lines of progress noise per batch from agent context. Also remove dead `main.py` placeholder.
+- **Technical Boundary:**
+  - Add `--quiet` flag to `parse_vision.py`
+  - Add `print_progress()` helper that checks the quiet flag; convert all progress-only `print_err()` calls (uploading, processing, classifying, cleanup, etc.)
+  - Warnings and errors continue to print regardless of `--quiet`
+  - Update SKILL.md to include `--quiet` in default invocation examples
+  - Delete `main.py` (dead placeholder that only prints "Hello from doc-extractor!")
+- **Verification Criteria (Definition of Done):**
+  - `--quiet` suppresses progress messages but still shows warnings and errors
+  - `main.py` no longer exists
+  - `uv run pytest` passes
+
 ## Minor Backlog
 
 - [ ] Add `COA_RAW` document type and schema parsing based on PRD
