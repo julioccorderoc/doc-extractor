@@ -19,4 +19,6 @@ eng.traineddata
 experiments/
 tests/
 fix_snapshot_timeout.sh
-
+.desloppify/
+.claude/
+scorecard.png

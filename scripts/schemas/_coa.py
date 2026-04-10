@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -192,7 +192,7 @@ class CoaExtraction(BaseModel):
         ...,
         description="The document-level metadata establishing product identity and chain of custody.",
     )
-    test_results: List[TestResult] = Field(
+    test_results: list[TestResult] = Field(
         ...,
         description="An array containing every individual test performed on the certificate. Do not skip any rows.",
     )

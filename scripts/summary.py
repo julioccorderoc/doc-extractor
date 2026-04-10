@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from schemas import ExtractionResult
+from schemas import (
+    CoaExtraction,
+    DocumentType,
+    ExtractionResult,
+    InvoicePayload,
+    LabConclusion,
+    QuotePayload,
+)
 
 
 def build_summary(res: ExtractionResult, filename: str) -> str:
@@ -11,25 +18,27 @@ def build_summary(res: ExtractionResult, filename: str) -> str:
     conf = res.confidence
     p = res.payload
 
-    if doc_type == "COA" and p is not None:
-        lot = getattr(getattr(p, "header_data", None), "lot_number", "?")
-        product = getattr(getattr(p, "header_data", None), "product_name", "?")
-        tests = getattr(p, "test_results", [])
-        total = len(tests)
-        passed = sum(1 for t in tests if getattr(t, "lab_conclusion", None) == "PASS")
+    if doc_type == DocumentType.COA and p is not None:
+        assert isinstance(p, CoaExtraction)
+        lot = p.header_data.lot_number if p.header_data else "?"
+        product = p.header_data.product_name if p.header_data else "?"
+        total = len(p.test_results)
+        passed = sum(1 for t in p.test_results if t.lab_conclusion == LabConclusion.PASS)
         return f"COA | {lot} | {product} | {passed}/{total} PASS | confidence={conf}"
 
-    if doc_type == "INVOICE" and p is not None:
-        inv_num = getattr(p, "invoice_number", None) or "?"
-        vendor = getattr(p, "vendor_name", None) or "?"
-        items = len(getattr(p, "line_items", []))
-        total = getattr(p, "grand_total", None)
+    if doc_type == DocumentType.INVOICE and p is not None:
+        assert isinstance(p, InvoicePayload)
+        inv_num = p.invoice_number or "?"
+        vendor = p.vendor_name or "?"
+        items = len(p.line_items)
+        total = p.grand_total
         total_str = f"${total}" if total is not None else "?"
         return f"INVOICE | #{inv_num} | {vendor} | {items} items | {total_str} | confidence={conf}"
 
-    if doc_type == "QUOTE" and p is not None:
-        vendor = getattr(p, "vendor_name", None) or "?"
-        items = len(getattr(p, "line_items", []))
+    if doc_type == DocumentType.QUOTE and p is not None:
+        assert isinstance(p, QuotePayload)
+        vendor = p.vendor_name or "?"
+        items = len(p.quoted_items)
         return f"QUOTE | {vendor} | {items} items | confidence={conf}"
 
     # Generic fallback for all other types

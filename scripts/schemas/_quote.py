@@ -48,11 +48,11 @@ class QuotedItem(BaseModel):
     description: Optional[str] = Field(
         default=None, description="Main product or item being quoted"
     )
-    technical_details: Optional[list[QuoteTechnicalDetail]] = Field(
+    technical_details: list[QuoteTechnicalDetail] = Field(
         default_factory=list,
         description="List of technical specifications, dimensions, formula details, or product characteristics",
     )
-    pricing_tiers: Optional[list[PricingTier]] = Field(
+    pricing_tiers: list[PricingTier] = Field(
         default_factory=list, description="Volume-based pricing tiers for this item"
     )
 
@@ -77,11 +77,11 @@ class QuotePayload(BaseModel):
     ship_to: Optional[CompanyInfo] = Field(
         default=None, description="Name and address where goods would be shipped"
     )
-    quoted_items: Optional[list[QuotedItem]] = Field(
+    quoted_items: list[QuotedItem] = Field(
         default_factory=list,
         description="Products being quoted with tiered pricing and technical details",
     )
-    additional_fees: Optional[list[AdditionalFee]] = Field(
+    additional_fees: list[AdditionalFee] = Field(
         default_factory=list,
         description="Extra line items like setup fees, tooling, or freight",
     )

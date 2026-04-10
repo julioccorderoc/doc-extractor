@@ -43,7 +43,7 @@ class ExtractionResult(BaseModel):
     extracted_date: Optional[datetime.date] = Field(
         default=None, description="Extraction date in YYYY-MM-DD format"
     )
-    payload: Optional[PayloadUnion] = Field(  # type: ignore[valid-type]
+    payload: Optional[PayloadUnion] = Field(  # type: ignore[valid-type]  # mypy cannot resolve Union type alias used in Optional with PEP 563 deferred annotations
         default=None,
         description="Extracted document data (schema varies by document_type)",
     )

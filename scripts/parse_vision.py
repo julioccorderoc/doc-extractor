@@ -44,6 +44,7 @@ from gemini import (
 )
 from ingestion import (
     ALLOWED_EXTENSIONS,
+    IngestionError,
     download_url,
     preprocess_file,
     slice_pdf,
@@ -65,16 +66,19 @@ def process_single_file(
     client: genai.Client,
     model: str,
     hint_type: DocumentType | None,
-    args: argparse.Namespace,
     temp_dir_path: Path,
+    *,
+    pages: str | None = None,
+    skip_liteparse: bool = False,
+    debug: bool = False,
 ) -> ExtractionResult | None:
     # 1. Preprocess (Convert .xlsx/.docx to .txt)
     processed_path = preprocess_file(file_path, temp_dir_path)
 
     # 2. Slice PDF if requested
-    if args.pages:
+    if pages:
         if processed_path.suffix.lower() == ".pdf":
-            processed_path = slice_pdf(processed_path, args.pages, temp_dir_path)
+            processed_path = slice_pdf(processed_path, pages, temp_dir_path)
         else:
             print_err(
                 f"Warning: --pages only applies to PDF files. Ignoring for {processed_path.name}"
@@ -82,7 +86,7 @@ def process_single_file(
 
     # 3. Extract text locally unless skipped
     text_context: str | None = None
-    if not args.skip_liteparse:
+    if not skip_liteparse:
         try:
             from liteparse import LiteParse
 
@@ -127,7 +131,7 @@ def process_single_file(
             try:
                 payload = PAYLOAD_SCHEMA_MAP[doc_type].model_validate_json(payload_json)
             except pydantic.ValidationError as e:
-                if args.debug:
+                if debug:
                     print_err(
                         f"\n--- DEBUG: RAW LLM RESPONSE ---\n{payload_json}\n--- END DEBUG ---\n"
                     )
@@ -226,44 +230,53 @@ def main() -> None:
 
         client = genai.Client(api_key=api_key)
 
-        files_to_process = []
-        if args.url:
-            file_path = download_url(args.url, temp_dir_path)
-            if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                print_err(
-                    f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                )
-                sys.exit(2)
-            files_to_process.append(file_path)
-        else:
-            input_path = Path(args.file_path)
-            if not input_path.exists():
-                print_err(f"Error: Path not found: {input_path}")
-                sys.exit(2)
-
-            if input_path.is_dir():
-                for f in input_path.iterdir():
-                    if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
-                        files_to_process.append(f)
-                if not files_to_process:
+        try:
+            files_to_process = []
+            if args.url:
+                file_path = download_url(args.url, temp_dir_path)
+                if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
                     print_err(
-                        f"Error: No supported files found in directory {input_path}"
+                        f"Error: Unsupported file type '{file_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
                     )
                     sys.exit(2)
-                # Sort files to ensure deterministic output order
-                files_to_process.sort()
+                files_to_process.append(file_path)
             else:
-                if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-                    print_err(
-                        f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-                    )
+                input_path = Path(args.file_path)
+                if not input_path.exists():
+                    print_err(f"Error: Path not found: {input_path}")
                     sys.exit(2)
-                files_to_process.append(input_path)
+
+                if input_path.is_dir():
+                    for f in input_path.iterdir():
+                        if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS:
+                            files_to_process.append(f)
+                    if not files_to_process:
+                        print_err(
+                            f"Error: No supported files found in directory {input_path}"
+                        )
+                        sys.exit(2)
+                    # Sort files to ensure deterministic output order
+                    files_to_process.sort()
+                else:
+                    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+                        print_err(
+                            f"Error: Unsupported file type '{input_path.suffix}'. Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                        )
+                        sys.exit(2)
+                    files_to_process.append(input_path)
+        except IngestionError:
+            sys.exit(2)
 
         results = []
         summaries = []
         for fp in files_to_process:
-            res = process_single_file(fp, client, model, hint_type, args, temp_dir_path)
+            try:
+                res = process_single_file(
+                    fp, client, model, hint_type, temp_dir_path,
+                    pages=args.pages, skip_liteparse=args.skip_liteparse, debug=args.debug,
+                )
+            except IngestionError:
+                continue
             if res:
                 res_dict = res.model_dump(mode="json")
                 res_dict["source_file"] = fp.name

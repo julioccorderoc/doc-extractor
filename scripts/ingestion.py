@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-import sys
 import urllib.parse
 from pathlib import Path
 
@@ -12,6 +11,12 @@ import requests
 from pypdf import PdfReader, PdfWriter
 
 from _output import print_err, print_progress
+
+
+class IngestionError(Exception):
+    """Raised when file ingestion fails (bad file type, download error, etc.)."""
+    pass
+
 
 ALLOWED_EXTENSIONS = {
     ".pdf",
@@ -34,13 +39,16 @@ def validate_file(file_path: str) -> Path:
     path = Path(file_path)
     if not path.exists():
         print_err(f"Error: File not found: {file_path}")
-        sys.exit(2)
+        raise IngestionError(f"File not found: {file_path}")
     if path.suffix.lower() not in ALLOWED_EXTENSIONS:
         print_err(
             f"Error: Unsupported file type '{path.suffix}'. "
             f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
-        sys.exit(2)
+        raise IngestionError(
+            f"Unsupported file type '{path.suffix}'. "
+            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
     return path
 
 
@@ -61,10 +69,12 @@ def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
             print_err(
                 "Error: markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)"
             )
-            sys.exit(2)
+            raise IngestionError(
+                "markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)"
+            )
         except Exception as e:
             print_err(f"Error converting file: {e}")
-            sys.exit(2)
+            raise IngestionError(f"Error converting file: {e}") from e
     return file_path
 
 
@@ -73,17 +83,19 @@ def _reject_private_url(url: str) -> None:
     hostname = urllib.parse.urlparse(url).hostname
     if not hostname:
         print_err("Error: URL has no hostname.")
-        sys.exit(2)
+        raise IngestionError("URL has no hostname.")
     try:
         infos = socket.getaddrinfo(hostname, None)
         for info in infos:
             addr = ipaddress.ip_address(info[4][0])
             if addr.is_private or addr.is_loopback or addr.is_link_local:
                 print_err(f"Error: URL resolves to a private/loopback address ({addr}). Refusing to download.")
-                sys.exit(2)
+                raise IngestionError(
+                    f"URL resolves to a private/loopback address ({addr}). Refusing to download."
+                )
     except socket.gaierror:
         print_err(f"Error: Could not resolve hostname '{hostname}'.")
-        sys.exit(2)
+        raise IngestionError(f"Could not resolve hostname '{hostname}'.") from None
 
 
 def download_url(url: str, dest_dir: Path) -> Path:
@@ -116,15 +128,17 @@ def download_url(url: str, dest_dir: Path) -> Path:
                     f.close()
                     dest_path.unlink(missing_ok=True)
                     print_err(f"Error: Download exceeds {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit.")
-                    sys.exit(2)
+                    raise IngestionError(
+                        f"Download exceeds {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit."
+                    )
                 f.write(chunk)
 
         return dest_path
-    except SystemExit:
+    except IngestionError:
         raise
     except Exception as e:
         print_err(f"Error downloading URL: {e}")
-        sys.exit(2)
+        raise IngestionError(f"Error downloading URL: {e}") from e
 
 
 def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
@@ -160,13 +174,15 @@ def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
 
         if not added_any:
             print_err("Error: No valid pages selected for slicing.")
-            sys.exit(2)
+            raise IngestionError("No valid pages selected for slicing.")
 
         dest_path = dest_dir / f"sliced_{file_path.name}"
         with open(dest_path, "wb") as f:
             writer.write(f)
 
         return dest_path
+    except IngestionError:
+        raise
     except Exception as e:
         print_err(f"Error slicing PDF: {e}")
-        sys.exit(2)
+        raise IngestionError(f"Error slicing PDF: {e}") from e

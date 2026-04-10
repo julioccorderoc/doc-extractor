@@ -8,6 +8,7 @@ import pytest
 
 import parse_vision
 import ingestion
+from ingestion import IngestionError
 import gemini
 from google.genai import errors as genai_errors
 
@@ -30,18 +31,16 @@ class _FakeAPIError(genai_errors.APIError):
 # ---------------------------------------------------------------------------
 
 
-def test_validate_file_exits_2_for_missing_file(tmp_path):
-    with pytest.raises(SystemExit) as exc:
+def test_validate_file_raises_for_missing_file(tmp_path):
+    with pytest.raises(IngestionError, match="File not found"):
         ingestion.validate_file(str(tmp_path / "nonexistent.pdf"))
-    assert exc.value.code == 2
 
 
-def test_validate_file_exits_2_for_unsupported_extension(tmp_path):
+def test_validate_file_raises_for_unsupported_extension(tmp_path):
     bad_file = tmp_path / "file.xyz"
     bad_file.touch()
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(IngestionError, match="Unsupported file type"):
         ingestion.validate_file(str(bad_file))
-    assert exc.value.code == 2
 
 
 def test_validate_file_accepts_allowed_extensions(tmp_path):
@@ -55,9 +54,8 @@ def test_validate_file_accepts_allowed_extensions(tmp_path):
 def test_validate_file_or_dir_accepts_directory(tmp_path):
     # validate_file only handles files; directories go through main() logic.
     # Verify validate_file rejects a directory path (no extension match).
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(IngestionError, match="Unsupported file type"):
         ingestion.validate_file(str(tmp_path))
-    assert exc.value.code == 2
 
 
 # ---------------------------------------------------------------------------
