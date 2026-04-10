@@ -185,8 +185,13 @@ Add new doc type: follow [docs/adding-new-document-type.md](docs/adding-new-docu
 doc-extractor/
 ├── SKILL.md                 ← Skill entry point — agent-agnostic instructions
 ├── scripts/
-│   ├── parse_vision.py      ← Main extraction engine
+│   ├── parse_vision.py      ← Main extraction engine (orchestration)
+│   ├── _cli.py              ← CLI argument parser + --schema handler
+│   ├── _output.py           ← Stderr helpers + JSON output serialization
+│   ├── gemini.py            ← Gemini API calls (upload, classify, extract, retry)
+│   ├── ingestion.py         ← File validation, download, preprocessing, input resolution
 │   ├── prompts.py           ← Extraction prompts and field instructions
+│   ├── summary.py           ← Compact one-line summaries per extraction result
 │   ├── cleanup_files.py     ← Utility to prune temp Google AI files
 │   └── schemas/             ← Modular Pydantic v2 schemas per doc type
 ├── evals/                   ← Snapshot-based regression testing

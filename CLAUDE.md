@@ -13,8 +13,13 @@ doc-extractor/                    # This directory IS the publishable skill
 │   ├── research.md               # Technical research and decisions
 │   └── roadmap.md                # Epic-based implementation plan (LIVE DOCUMENT)
 ├── scripts/
-│   ├── parse_vision.py           # Main extraction engine
+│   ├── parse_vision.py           # Main extraction engine (orchestration)
+│   ├── _cli.py                   # CLI argument parser + --schema handler
+│   ├── _output.py                # Stderr helpers + JSON output serialization
+│   ├── gemini.py                 # Gemini API calls (upload, classify, extract, retry)
+│   ├── ingestion.py              # File validation, download, preprocessing, input resolution
 │   ├── prompts.py                # Extraction prompts and system instructions
+│   ├── summary.py                # Compact one-line summaries per extraction result
 │   └── schemas/                  # Pydantic v2 models (one file per document type)
 │       ├── __init__.py           # Re-exports all public symbols
 │       ├── _enums.py             # DocumentType enum
