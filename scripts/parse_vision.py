@@ -21,9 +21,7 @@ Exit codes:
 
 from __future__ import annotations
 
-import argparse
 import datetime
-import json
 import os
 import sys
 import tempfile
@@ -33,7 +31,8 @@ import pydantic
 from google import genai
 from google.genai import errors as genai_errors
 
-from _output import print_err, print_progress, set_quiet
+from _cli import build_parser, handle_schema
+from _output import print_err, print_progress, set_quiet, write_output
 from gemini import (
     cleanup,
     classify,
@@ -43,9 +42,8 @@ from gemini import (
     with_retry,
 )
 from ingestion import (
-    ALLOWED_EXTENSIONS,
     IngestionError,
-    download_url,
+    build_files_to_process,
     preprocess_file,
     slice_pdf,
 )
@@ -59,6 +57,29 @@ from summary import _md_header, build_summary
 __version__ = "0.1.0"
 
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
+
+
+def _extract_text_context(file_path: Path) -> str | None:
+    """Run liteparse locally to get deterministic text for hybrid extraction.
+
+    Returns extracted text or None if liteparse is unavailable/fails.
+    """
+    try:
+        from liteparse import LiteParse
+
+        print_progress(f"Extracting local text context for {file_path.name} via liteparse...")
+        lp = LiteParse()
+        lp_result = lp.parse(str(file_path))
+        if hasattr(lp_result, "text") and lp_result.text.strip():
+            return lp_result.text
+        print_err("Warning: liteparse returned empty text.")
+        return None
+    except ImportError:
+        print_err("Warning: liteparse is not installed. Skipping local text extraction.")
+        return None
+    except Exception as e:
+        print_err(f"Warning: liteparse extraction failed: {e}")
+        return None
 
 
 def process_single_file(
@@ -86,26 +107,7 @@ def process_single_file(
             )
 
     # 3. Extract text locally unless skipped
-    text_context: str | None = None
-    if not skip_liteparse:
-        try:
-            from liteparse import LiteParse
-
-            print_progress(
-                f"Extracting local text context for {processed_path.name} via liteparse..."
-            )
-            lp = LiteParse()
-            lp_result = lp.parse(str(processed_path))
-            if hasattr(lp_result, "text") and lp_result.text.strip():
-                text_context = lp_result.text
-            else:
-                print_err("Warning: liteparse returned empty text.")
-        except ImportError:
-            print_err(
-                "Warning: liteparse is not installed. Skipping local text extraction."
-            )
-        except Exception as e:
-            print_err(f"Warning: liteparse extraction failed: {e}")
+    text_context = None if skip_liteparse else _extract_text_context(processed_path)
 
     uploaded_file = None
     try:
@@ -173,138 +175,8 @@ def process_single_file(
             cleanup(client, uploaded_file)
 
 
-def build_files_to_process(
-    args: argparse.Namespace, temp_dir_path: Path,
-) -> list[Path]:
-    """Resolve CLI inputs (file, directory, or URL) into a list of extractable file paths."""
-    if args.url:
-        file_path = download_url(args.url, temp_dir_path)
-        if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-            print_err(
-                f"Error: Unsupported file type '{file_path.suffix}'. "
-                f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            )
-            sys.exit(2)
-        return [file_path]
-
-    input_path = Path(args.file_path)
-    if not input_path.exists():
-        print_err(f"Error: Path not found: {input_path}")
-        sys.exit(2)
-
-    if input_path.is_dir():
-        files = sorted(
-            f for f in input_path.iterdir()
-            if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS
-        )
-        if not files:
-            print_err(f"Error: No supported files found in directory {input_path}")
-            sys.exit(2)
-        return files
-
-    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-        print_err(
-            f"Error: Unsupported file type '{input_path.suffix}'. "
-            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-        )
-        sys.exit(2)
-    return [input_path]
-
-
-def write_output(
-    results: list[dict], summaries: list[str], output_path: str | None,
-) -> None:
-    """Serialize extraction results to stdout or a file, then print summaries."""
-    output_json = json.dumps(results[0] if len(results) == 1 else results, indent=2)
-
-    if output_path:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(output_json)
-        print_progress(f"Output written to {output_path}")
-    else:
-        print(output_json)
-
-    for s in summaries:
-        print_err(s)
-
-
-def handle_schema(type_arg: str) -> None:
-    """Print JSON schema for a document type (or all types) to stdout."""
-    if type_arg.lower() == "all":
-        all_schemas = {}
-        for doc_type, model_cls in PAYLOAD_SCHEMA_MAP.items():
-            all_schemas[doc_type.value] = model_cls.model_json_schema()
-        print(json.dumps(all_schemas, indent=2))
-        return
-
-    raw = type_arg.upper()
-    try:
-        doc_type = DocumentType(raw)
-    except ValueError:
-        valid = ", ".join(t.value for t in DocumentType)
-        print_err(f"Error: Unknown type '{raw}'. Valid: {valid}")
-        sys.exit(2)
-
-    if doc_type not in PAYLOAD_SCHEMA_MAP:
-        print_err(f"Error: No schema for type '{raw}' (type exists but has no payload model)")
-        sys.exit(2)
-
-    print(json.dumps(PAYLOAD_SCHEMA_MAP[doc_type].model_json_schema(), indent=2))
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Document extraction engine using Google Gemini models."
-    )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("file_path", nargs="?", help="Local file path")
-    parser.add_argument("--url", help="Remote URL to download and extract")
-    parser.add_argument(
-        "--type", help="Skip pass 1 and use the supplied document type directly"
-    )
-    parser.add_argument(
-        "--skip-liteparse",
-        action="store_true",
-        help="Skip liteparse local text extraction (vision-only)",
-    )
-    parser.add_argument(
-        "--output", help="Write JSON directly to this file instead of stdout"
-    )
-    parser.add_argument(
-        "--pages",
-        help="Pages to extract (e.g., '1-3' or '1,3,5'). Only applies to PDFs.",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Dump raw LLM response string on validation failure",
-    )
-    parser.add_argument(
-        "--no-summary",
-        action="store_true",
-        help="Disable the compact one-line summary printed to stderr after each extraction",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show progress messages on stderr (suppressed by default; warnings and errors always shown)",
-    )
-    parser.add_argument(
-        "--format",
-        choices=["plain", "markdown"],
-        default="plain",
-        help="Summary output format: plain (pipe-delimited) or markdown (table row)",
-    )
-    parser.add_argument(
-        "--summary-only",
-        action="store_true",
-        help="Classify only (skip extraction pass 2). Print summaries to stderr, no JSON output",
-    )
-    parser.add_argument(
-        "--schema",
-        help="Print JSON schema for a document type and exit. Use a TYPE name or 'all'.",
-    )
-
+    parser = build_parser(__version__)
     args = parser.parse_args()
 
     set_quiet(not args.verbose)
@@ -345,7 +217,7 @@ def main() -> None:
         client = genai.Client(api_key=api_key)
 
         try:
-            files_to_process = build_files_to_process(args, temp_dir_path)
+            files_to_process = build_files_to_process(args.file_path, args.url, temp_dir_path)
         except IngestionError:
             sys.exit(2)
 

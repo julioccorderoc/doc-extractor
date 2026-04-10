@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import sys
 import urllib.parse
 from pathlib import Path
 
@@ -139,6 +140,46 @@ def download_url(url: str, dest_dir: Path) -> Path:
     except Exception as e:
         print_err(f"Error downloading URL: {e}")
         raise IngestionError(f"Error downloading URL: {e}") from e
+
+
+def build_files_to_process(
+    file_path: str | None, url: str | None, temp_dir_path: Path,
+) -> list[Path]:
+    """Resolve CLI inputs (file, directory, or URL) into a list of extractable file paths."""
+    if url:
+        downloaded = download_url(url, temp_dir_path)
+        if downloaded.suffix.lower() not in ALLOWED_EXTENSIONS:
+            print_err(
+                f"Error: Unsupported file type '{downloaded.suffix}'. "
+                f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+            sys.exit(2)
+        return [downloaded]
+
+    input_path = Path(file_path)  # type: ignore[arg-type]
+    if not input_path.exists():
+        print_err(f"Error: Path not found: {input_path}")
+        import sys
+        sys.exit(2)
+
+    if input_path.is_dir():
+        files = sorted(
+            f for f in input_path.iterdir()
+            if f.is_file() and f.suffix.lower() in ALLOWED_EXTENSIONS
+        )
+        if not files:
+            print_err(f"Error: No supported files found in directory {input_path}")
+            sys.exit(2)
+        return files
+
+    if input_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        print_err(
+            f"Error: Unsupported file type '{input_path.suffix}'. "
+            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
+        import sys
+        sys.exit(2)
+    return [input_path]
 
 
 def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
