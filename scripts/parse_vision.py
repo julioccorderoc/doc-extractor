@@ -23,311 +23,41 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import ipaddress
 import json
 import os
-import socket
 import sys
 import tempfile
-import time
-import urllib.parse
 from pathlib import Path
 
 import pydantic
-import requests
-from pypdf import PdfReader, PdfWriter
-
-from typing import Any, Callable, TypeVar
-
 from google import genai
 from google.genai import errors as genai_errors
-from google.genai.types import GenerateContentConfig
 
-from prompts import build_classification_prompt, build_extraction_prompt_for_type
+from _output import print_err, print_progress, set_quiet
+from gemini import (
+    cleanup,
+    classify,
+    extract_typed,
+    upload_file,
+    wait_for_processing,
+    with_retry,
+)
+from ingestion import (
+    ALLOWED_EXTENSIONS,
+    download_url,
+    preprocess_file,
+    slice_pdf,
+)
 from schemas import (
-    ClassificationResult,
     DocumentType,
     ExtractionResult,
     PAYLOAD_SCHEMA_MAP,
 )
+from summary import build_summary
 
 __version__ = "0.1.0"
 
-ALLOWED_EXTENSIONS = {
-    ".pdf",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".webp",
-    ".xlsx",
-    ".docx",
-    ".txt",
-    ".md",
-    ".csv",
-}
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
-MAX_RETRIES = 3
-RETRYABLE_CODES = {429, 500, 503}
-UPLOAD_TIMEOUT_SECS = 300  # 5 minutes max for file processing
-
-
-_quiet: bool = False
-
-
-def print_err(msg: str) -> None:
-    """Print to stderr (stdout is reserved for JSON output)."""
-    print(msg, file=sys.stderr)
-
-
-def print_progress(msg: str) -> None:
-    """Print progress info to stderr, suppressed when --quiet is set."""
-    if not _quiet:
-        print(msg, file=sys.stderr)
-
-
-def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
-    """Convert unsupported formats (.xlsx, .docx, .csv) to markdown text using MarkItDown."""
-    if file_path.suffix.lower() in {".xlsx", ".docx", ".csv"}:
-        print_progress(f"Converting {file_path.suffix} to markdown via MarkItDown...")
-        try:
-            from markitdown import MarkItDown
-
-            md = MarkItDown()
-            result = md.convert(str(file_path))
-            md_path = temp_dir / f"{file_path.stem}.txt"
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write(result.text_content)
-            return md_path
-        except ImportError:
-            print_err(
-                "Error: markitdown is required to process .xlsx/.docx/.csv files. (uv add markitdown)"
-            )
-            sys.exit(2)
-        except Exception as e:
-            print_err(f"Error converting file: {e}")
-            sys.exit(2)
-    return file_path
-
-
-MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
-
-
-def _reject_private_url(url: str) -> None:
-    """Block requests to private/loopback IPs (basic SSRF protection)."""
-    hostname = urllib.parse.urlparse(url).hostname
-    if not hostname:
-        print_err("Error: URL has no hostname.")
-        sys.exit(2)
-    try:
-        infos = socket.getaddrinfo(hostname, None)
-        for info in infos:
-            addr = ipaddress.ip_address(info[4][0])
-            if addr.is_private or addr.is_loopback or addr.is_link_local:
-                print_err(f"Error: URL resolves to a private/loopback address ({addr}). Refusing to download.")
-                sys.exit(2)
-    except socket.gaierror:
-        print_err(f"Error: Could not resolve hostname '{hostname}'.")
-        sys.exit(2)
-
-
-def download_url(url: str, dest_dir: Path) -> Path:
-    print_progress(f"Downloading {url}...")
-    _reject_private_url(url)
-    try:
-        response = requests.get(url, stream=True, timeout=30)
-        response.raise_for_status()
-
-        # Try to get filename from Content-Disposition or URL
-        filename = "downloaded_file.pdf"
-        if "content-disposition" in response.headers:
-            cd = response.headers["content-disposition"]
-            if "filename=" in cd:
-                filename = cd.split("filename=")[1].strip("\"'")
-        else:
-            parsed = urllib.parse.urlparse(url)
-            if parsed.path:
-                name = parsed.path.split("/")[-1]
-                if name:
-                    filename = name
-
-        dest_path = dest_dir / filename
-        bytes_written = 0
-        with open(dest_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                bytes_written += len(chunk)
-                if bytes_written > MAX_DOWNLOAD_BYTES:
-                    f.close()
-                    dest_path.unlink(missing_ok=True)
-                    print_err(f"Error: Download exceeds {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB limit.")
-                    sys.exit(2)
-                f.write(chunk)
-
-        return dest_path
-    except SystemExit:
-        raise
-    except Exception as e:
-        print_err(f"Error downloading URL: {e}")
-        sys.exit(2)
-
-
-def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
-    print_progress(f"Slicing PDF to pages: {pages_spec}")
-    try:
-        reader = PdfReader(file_path)
-        writer = PdfWriter()
-
-        # Parse pages_spec: "1-3", "1,3,5"
-        pages_to_keep = set()
-        for part in pages_spec.split(","):
-            part = part.strip()
-            if "-" in part:
-                start, end = part.split("-")
-                start_idx = int(start) - 1
-                end_idx = int(end) - 1
-                for i in range(start_idx, end_idx + 1):
-                    pages_to_keep.add(i)
-            else:
-                pages_to_keep.add(int(part) - 1)
-
-        num_pages = len(reader.pages)
-        added_any = False
-        for i in sorted(pages_to_keep):
-            if 0 <= i < num_pages:
-                writer.add_page(reader.pages[i])
-                added_any = True
-            else:
-                print_err(
-                    f"Warning: Page {i + 1} is out of range (PDF has {num_pages} pages)."
-                )
-
-        if not added_any:
-            print_err("Error: No valid pages selected for slicing.")
-            sys.exit(2)
-
-        dest_path = dest_dir / f"sliced_{file_path.name}"
-        with open(dest_path, "wb") as f:
-            writer.write(f)
-
-        return dest_path
-    except Exception as e:
-        print_err(f"Error slicing PDF: {e}")
-        sys.exit(2)
-
-
-def validate_file(file_path: str) -> Path:
-    """Validate that the file exists and has an allowed extension."""
-    path = Path(file_path)
-    if not path.exists():
-        print_err(f"Error: File not found: {file_path}")
-        sys.exit(2)
-    if path.suffix.lower() not in ALLOWED_EXTENSIONS:
-        print_err(
-            f"Error: Unsupported file type '{path.suffix}'. "
-            f"Supported: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-        )
-        sys.exit(2)
-    return path
-
-
-T = TypeVar("T")
-
-
-def with_retry(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    """Execute fn with exponential backoff for retryable API errors (429, 500, 503)."""
-    for attempt in range(MAX_RETRIES):
-        try:
-            return fn(*args, **kwargs)
-        except genai_errors.APIError as e:
-            if e.code not in RETRYABLE_CODES or attempt == MAX_RETRIES - 1:
-                raise
-            wait = 2**attempt  # 1s, 2s, 4s
-            print_err(
-                f"API error {e.code}, retrying in {wait}s "
-                f"(attempt {attempt + 1}/{MAX_RETRIES})..."
-            )
-            time.sleep(wait)
-    raise RuntimeError("unreachable: with_retry exhausted loop without returning")
-
-
-def upload_file(client: genai.Client, file_path: Path) -> genai.types.File:
-    """Upload a file to Google's storage. Returns immediately after upload."""
-    print_progress(f"Uploading {file_path.name}...")
-    return client.files.upload(file=str(file_path))
-
-
-def wait_for_processing(
-    client: genai.Client, uploaded: genai.types.File
-) -> genai.types.File:
-    """Poll until the uploaded file finishes processing. Raises on failure or timeout."""
-    deadline = time.monotonic() + UPLOAD_TIMEOUT_SECS
-    while uploaded.state.name == "PROCESSING":
-        if time.monotonic() > deadline:
-            raise TimeoutError(
-                f"File processing timed out after {UPLOAD_TIMEOUT_SECS}s"
-            )
-        print_progress("Waiting for file processing...")
-        time.sleep(2)
-        uploaded = client.files.get(name=uploaded.name)
-
-    if uploaded.state.name == "FAILED":
-        raise RuntimeError(f"File processing failed: {uploaded.name}")
-
-    print_progress(f"File ready: {uploaded.name}")
-    return uploaded
-
-
-def classify(
-    client: genai.Client, uploaded_file: genai.types.File, model: str
-) -> ClassificationResult:
-    """Pass 1: classify document type. Cheap call with a minimal response schema."""
-    print_progress("Pass 1: classifying document...")
-    response = client.models.generate_content(
-        model=model,
-        contents=[build_classification_prompt(), uploaded_file],
-        config=GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=ClassificationResult,
-        ),
-    )
-    return ClassificationResult.model_validate_json(response.text)
-
-
-def extract_typed(
-    client: genai.Client,
-    uploaded_file: genai.types.File,
-    model: str,
-    doc_type: DocumentType,
-    text_context: str | None = None,
-) -> str:
-    """Pass 2: extract payload using the exact schema for the classified type."""
-    print_progress(f"Pass 2: extracting {doc_type.value} fields...")
-    payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
-
-    contents = [
-        build_extraction_prompt_for_type(doc_type, has_text_context=bool(text_context)),
-        uploaded_file,
-    ]
-    if text_context:
-        contents.append(f"PRE-PROCESSED TEXT EXTRACTION:\n{text_context}")
-
-    response = client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=payload_class,
-        ),
-    )
-    return response.text
-
-
-def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
-    """Delete the uploaded file from Google's storage."""
-    try:
-        client.files.delete(name=uploaded_file.name)
-        print_progress(f"Cleaned up: {uploaded_file.name}")
-    except genai_errors.APIError as e:
-        print_err(f"Warning: Cleanup failed: {e}")
 
 
 def process_single_file(
@@ -412,7 +142,7 @@ def process_single_file(
 
     except genai_errors.APIError as e:
         print_err(
-            f"Error processing {file_path.name}: API failure after {MAX_RETRIES} retries (HTTP {e.code}): {e.message}"
+            f"Error processing {file_path.name}: API failure after retries (HTTP {e.code}): {e.message}"
         )
         return None
     except Exception as e:
@@ -421,43 +151,6 @@ def process_single_file(
     finally:
         if uploaded_file is not None:
             cleanup(client, uploaded_file)
-
-
-def build_summary(res: ExtractionResult, filename: str) -> str:
-    """Build a compact one-line summary string for a single extraction result."""
-    doc_type = res.document_type
-    conf = res.confidence
-    p = res.payload
-
-    if doc_type == "COA" and p is not None:
-        lot = getattr(getattr(p, "header_data", None), "lot_number", "?")
-        product = getattr(getattr(p, "header_data", None), "product_name", "?")
-        tests = getattr(p, "test_results", [])
-        total = len(tests)
-        passed = sum(1 for t in tests if getattr(t, "lab_conclusion", None) == "PASS")
-        return f"COA | {lot} | {product} | {passed}/{total} PASS | confidence={conf}"
-
-    if doc_type == "INVOICE" and p is not None:
-        inv_num = getattr(p, "invoice_number", None) or "?"
-        vendor = getattr(p, "vendor_name", None) or "?"
-        items = len(getattr(p, "line_items", []))
-        total = getattr(p, "grand_total", None)
-        total_str = f"${total}" if total is not None else "?"
-        return f"INVOICE | #{inv_num} | {vendor} | {items} items | {total_str} | confidence={conf}"
-
-    if doc_type == "QUOTE" and p is not None:
-        vendor = getattr(p, "vendor_name", None) or "?"
-        items = len(getattr(p, "line_items", []))
-        return f"QUOTE | {vendor} | {items} items | confidence={conf}"
-
-    # Generic fallback for all other types
-    # Try common identifying fields
-    for field in ("product_name", "brand", "vendor_name", "doc_number"):
-        val = getattr(p, field, None) if p else None
-        if val:
-            return f"{doc_type} | {val} | confidence={conf}"
-
-    return f"{doc_type} | {filename} | confidence={conf}"
 
 
 def main() -> None:
@@ -500,8 +193,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    global _quiet
-    _quiet = not args.verbose
+    set_quiet(not args.verbose)
 
     if not args.file_path and not args.url:
         print_err("Error: Must provide either a local file_path or --url")

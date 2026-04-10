@@ -1,4 +1,4 @@
-"""Unit tests for parse_vision.py — no API key or real network calls required."""
+"""Unit tests for the extraction engine — no API key or real network calls required."""
 
 import datetime
 import sys
@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import parse_vision
+import ingestion
+import gemini
 from google.genai import errors as genai_errors
 
 
@@ -24,13 +26,13 @@ class _FakeAPIError(genai_errors.APIError):
 
 
 # ---------------------------------------------------------------------------
-# validate_file
+# validate_file (now in ingestion module)
 # ---------------------------------------------------------------------------
 
 
 def test_validate_file_exits_2_for_missing_file(tmp_path):
     with pytest.raises(SystemExit) as exc:
-        parse_vision.validate_file(str(tmp_path / "nonexistent.pdf"))
+        ingestion.validate_file(str(tmp_path / "nonexistent.pdf"))
     assert exc.value.code == 2
 
 
@@ -38,7 +40,7 @@ def test_validate_file_exits_2_for_unsupported_extension(tmp_path):
     bad_file = tmp_path / "file.xyz"
     bad_file.touch()
     with pytest.raises(SystemExit) as exc:
-        parse_vision.validate_file(str(bad_file))
+        ingestion.validate_file(str(bad_file))
     assert exc.value.code == 2
 
 
@@ -46,7 +48,7 @@ def test_validate_file_accepts_allowed_extensions(tmp_path):
     for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp"):
         f = tmp_path / f"doc{ext}"
         f.touch()
-        result = parse_vision.validate_file(str(f))
+        result = ingestion.validate_file(str(f))
         assert result == f
 
 
@@ -54,7 +56,7 @@ def test_validate_file_or_dir_accepts_directory(tmp_path):
     # validate_file only handles files; directories go through main() logic.
     # Verify validate_file rejects a directory path (no extension match).
     with pytest.raises(SystemExit) as exc:
-        parse_vision.validate_file(str(tmp_path))
+        ingestion.validate_file(str(tmp_path))
     assert exc.value.code == 2
 
 
@@ -73,7 +75,7 @@ def test_build_extraction_prompt_for_type_contains_today():
 
 
 # ---------------------------------------------------------------------------
-# with_retry
+# with_retry (now in gemini module)
 # ---------------------------------------------------------------------------
 
 
@@ -82,21 +84,21 @@ def test_with_retry_retries_on_retryable_codes(code):
     failing_fn = MagicMock(side_effect=_FakeAPIError(code))
     with patch("time.sleep"):
         with pytest.raises(_FakeAPIError):
-            parse_vision.with_retry(failing_fn)
-    assert failing_fn.call_count == parse_vision.MAX_RETRIES
+            gemini.with_retry(failing_fn)
+    assert failing_fn.call_count == gemini.MAX_RETRIES
 
 
 @pytest.mark.parametrize("code", [400, 404])
 def test_with_retry_does_not_retry_non_retryable_codes(code):
     failing_fn = MagicMock(side_effect=_FakeAPIError(code))
     with pytest.raises(_FakeAPIError):
-        parse_vision.with_retry(failing_fn)
+        gemini.with_retry(failing_fn)
     assert failing_fn.call_count == 1
 
 
 def test_with_retry_returns_result_on_success():
     succeeding_fn = MagicMock(return_value="ok")
-    result = parse_vision.with_retry(succeeding_fn, "arg1", key="val")
+    result = gemini.with_retry(succeeding_fn, "arg1", key="val")
     assert result == "ok"
     succeeding_fn.assert_called_once_with("arg1", key="val")
 
@@ -173,32 +175,32 @@ def test_model_dump_json_mode_serializes_dates():
 
 
 # ---------------------------------------------------------------------------
-# download_url
+# download_url (now in ingestion module)
 # ---------------------------------------------------------------------------
 
 
-@patch("parse_vision.requests.get")
+@patch("ingestion.requests.get")
 def test_download_url_success(mock_get, tmp_path):
     mock_resp = MagicMock()
     mock_resp.headers = {"content-disposition": 'attachment; filename="remote_doc.pdf"'}
     mock_resp.iter_content.return_value = [b"pdf content"]
     mock_get.return_value = mock_resp
 
-    dest_path = parse_vision.download_url("http://example.com/file", tmp_path)
+    dest_path = ingestion.download_url("http://example.com/file", tmp_path)
 
     assert dest_path == tmp_path / "remote_doc.pdf"
     assert dest_path.read_bytes() == b"pdf content"
     mock_get.assert_called_once_with("http://example.com/file", stream=True, timeout=30)
 
 
-@patch("parse_vision.requests.get")
+@patch("ingestion.requests.get")
 def test_download_url_fallback_filename(mock_get, tmp_path):
     mock_resp = MagicMock()
     mock_resp.headers = {}
     mock_resp.iter_content.return_value = [b"content"]
     mock_get.return_value = mock_resp
 
-    dest_path = parse_vision.download_url(
+    dest_path = ingestion.download_url(
         "http://example.com/some/path/my_file.pdf", tmp_path
     )
 
@@ -207,12 +209,12 @@ def test_download_url_fallback_filename(mock_get, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# slice_pdf
+# slice_pdf (now in ingestion module)
 # ---------------------------------------------------------------------------
 
 
-@patch("parse_vision.PdfWriter")
-@patch("parse_vision.PdfReader")
+@patch("ingestion.PdfWriter")
+@patch("ingestion.PdfReader")
 def test_slice_pdf(mock_reader_class, mock_writer_class, tmp_path):
     # Setup mock reader with 5 pages
     mock_reader = MagicMock()
@@ -233,12 +235,12 @@ def test_slice_pdf(mock_reader_class, mock_writer_class, tmp_path):
     file_path.touch()
 
     # Slice to pages 1, 3, and 5 (indices 0, 2, 4)
-    dest_path = parse_vision.slice_pdf(file_path, "1,3,5", tmp_path)
+    dest_path = ingestion.slice_pdf(file_path, "1,3,5", tmp_path)
 
     assert dest_path == tmp_path / "sliced_original.pdf"
     assert mock_writer.add_page.call_count == 3
 
     # Slicing with ranges "1-3,5" -> indices 0,1,2, 4
     mock_writer.reset_mock()
-    dest_path = parse_vision.slice_pdf(file_path, "1-3,5", tmp_path)
+    dest_path = ingestion.slice_pdf(file_path, "1-3,5", tmp_path)
     assert mock_writer.add_page.call_count == 4
