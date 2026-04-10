@@ -4,7 +4,7 @@
 
 ### Which SDK?
 
-Use `google-genai` (the new unified SDK), NOT the legacy `google-generativeai`.
+Use `google-genai` (new unified SDK), NOT legacy `google-generativeai`.
 
 ```bash
 pip install google-genai
@@ -17,7 +17,7 @@ from google import genai
 client = genai.Client(api_key=os.environ["GEMINI_DOC_EXTRACTOR_KEY"])
 ```
 
-The SDK auto-detects `GEMINI_API_KEY` env var, but since the PRD specifies `GEMINI_DOC_EXTRACTOR_KEY`, we pass it explicitly.
+SDK auto-detects `GEMINI_API_KEY` env var, but PRD specifies `GEMINI_DOC_EXTRACTOR_KEY` — pass explicitly.
 
 ### File Upload API
 
@@ -41,7 +41,7 @@ response = client.models.generate_content(
 client.files.delete(name=uploaded.name)
 ```
 
-Limits: 50MB per PDF, 1000 pages max, 2GB general file limit. Files auto-delete after 48h. No additional cost for the Files API itself.
+Limits: 50MB/PDF, 1000 pages max, 2GB general. Auto-delete after 48h. No extra cost for Files API.
 
 ### Structured Output (Critical for Reliability)
 
@@ -80,11 +80,11 @@ response = client.models.generate_content(
 
 #### Option B: Raw JSON Schema dict
 
-Same `config` shape, just pass a dict instead of Pydantic. Less type-safe, harder to maintain.
+Same `config` shape, pass dict instead of Pydantic. Less type-safe, harder to maintain.
 
 #### Recommendation
 
-Pydantic. We get validation, type hints, and `.model_json_schema()` for free.
+Pydantic. Get validation, type hints, and `.model_json_schema()` for free.
 
 ---
 
@@ -102,13 +102,13 @@ Pydantic. We get validation, type hints, and `.model_json_schema()` for free.
 | Context window | 1M tokens |
 | Free tier | Yes (rate-limited) |
 
-A typical document extraction (1-page PDF + schema prompt) costs roughly ~$0.001–$0.003 per call. Extremely cheap.
+Typical extraction (~1-page PDF + schema prompt) costs ~$0.001–$0.003/call. Extremely cheap.
 
-Why Flash over Pro: The task is extraction, not reasoning. Flash handles structured data extraction from documents very well and is 10x cheaper than Pro.
+Flash over Pro: task is extraction, not reasoning. Flash handles structured extraction well, 10x cheaper.
 
 ### Target Model: Gemma 4
 
-Gemma 4 was released April 2, 2026 in 4 variants:
+Released April 2, 2026 in 4 variants:
 
 | Variant | Params | Vision | API Available | Structured JSON |
 |---|---|---|---|---|
@@ -117,16 +117,16 @@ Gemma 4 was released April 2, 2026 in 4 variants:
 | 26B MoE | 3.8B active / 25.2B total | Yes | Yes (AI Studio) | Yes |
 | 31B Dense | 30.7B | Yes | Yes (AI Studio) | Yes |
 
-Key finding: The E4B model (the user's long-term target) is currently NOT available through Google AI Studio API — only via local deployment (Hugging Face, Ollama, AI Edge Gallery). Only the 26B and 31B are API-accessible today.
+Key finding: E4B (long-term target) NOT available through AI Studio API — local deployment only (Hugging Face, Ollama, AI Edge Gallery). Only 26B and 31B are API-accessible.
 
-Model IDs on the API:
+Model IDs on API:
 
 - `gemma-4-26b-a4b-it` — MoE, lighter compute
 - `gemma-4-31b-it` — Dense, heavier but more capable
 
-Both support `response_mime_type: "application/json"` for structured output through the Gemini API.
+Both support `response_mime_type: "application/json"` for structured output.
 
-Gemma 4 is listed as "Free of charge" on the free tier — no per-token cost, just rate limits.
+Gemma 4 listed "Free of charge" on free tier — no per-token cost, rate limits only.
 
 ### Migration Path
 
@@ -134,7 +134,7 @@ Gemma 4 is listed as "Free of charge" on the free tier — no per-token cost, ju
 Phase 1-3: gemini-2.5-flash  →  Phase 4: gemma-4-26b-a4b-it  →  Future: gemma-4-e4b (when API-available)
 ```
 
-Switching models is a one-line change since they all use the same SDK and API surface.
+Switching models = one-line change. Same SDK and API surface.
 
 ---
 
@@ -142,7 +142,7 @@ Switching models is a one-line change since they all use the same SDK and API su
 
 ### Skill Format
 
-The repo root IS the publishable skill — agent-agnostic (Claude Code, Gemini, OpenCode, etc.):
+Repo root IS the publishable skill — agent-agnostic (Claude Code, Gemini, OpenCode, etc.):
 
 ```text
 doc-extractor/
@@ -166,68 +166,62 @@ allowed-tools:
 ---
 ```
 
-`disable-model-invocation: true` — The autonomous supply chain agent controls when extraction happens. The agent invokes it via `/doc-extractor <file_path>`.
+`disable-model-invocation: true` — autonomous supply chain agent controls when extraction happens. Agent invokes via `/doc-extractor <file_path>`.
 
-`allowed-tools: Bash(python *)` — The skill only needs to run the Python script.
+`allowed-tools: Bash(python *)` — skill only needs to run Python script.
 
 ### Script Invocation Pattern
 
-The SKILL.md instructs the agent to:
+SKILL.md instructs agent to:
 
 1. Verify `$GEMINI_DOC_EXTRACTOR_KEY` is set
 2. Run `python ${SKILL_DIR}/scripts/parse_vision.py $ARGUMENTS`
 3. Capture stdout (pure JSON)
 4. Interpret exit codes (0=success, 1=missing key, 2=bad file type, 3=API error)
 
-`${SKILL_DIR}` is the agent-agnostic equivalent of `${CLAUDE_SKILL_DIR}` — resolved by whichever runtime loads the skill.
+`${SKILL_DIR}` = agent-agnostic equivalent of `${CLAUDE_SKILL_DIR}` — resolved by whichever runtime loads skill.
 
 ---
 
 ## 4. Implementation Phases
 
-Each phase is small enough to complete in a single session.
+Each phase completable in single session.
 
 ### Phase 1: Core Script + Single Schema (COA)
 
-- Set up project dependencies (`google-genai`, `pydantic`)
-- Implement `parse_vision.py` with:
-  - API key validation
-  - File upload + polling
-  - Inference with `gemini-2.5-flash`
-  - Structured output using a single schema (COA)
-  - stdout JSON output
-  - File cleanup
-- Test with a real COA from `test_docs/`
+- Set up deps (`google-genai`, `pydantic`)
+- Implement `parse_vision.py`: API key validation, file upload + polling, inference with `gemini-2.5-flash`, structured output with single schema (COA), stdout JSON, file cleanup
+- Test with real COA from `test_docs/`
 
 ### Phase 2: All Document Schemas
 
-- Define Pydantic models for all document types: COA, Invoice, Label, Product Spec Sheet, Packaging Spec Sheet
-- Implement the two-step prompt: classify document type → extract with correct schema
-- Add the `UNKNOWN` fallback with `raw_text_fallback`
-- Test with multiple document types from `test_docs/`
+- Define Pydantic models for all types: COA, Invoice, Label, Product Spec Sheet, Packaging Spec Sheet
+- Two-step prompt: classify doc type → extract with correct schema
+- `UNKNOWN` fallback with `raw_text_fallback`
+- Test with multiple doc types from `test_docs/`
 
 ### Phase 3: SKILL.md + Error Handling
 
-- Write the `SKILL.md` with trigger logic and instructions
-- Add exponential backoff (3 retries)
-- Add exit codes (0, 1, 2, 3) per PRD spec
-- Add file extension validation
+- Write `SKILL.md` with trigger logic + instructions
+- Exponential backoff (3 retries)
+- Exit codes (0, 1, 2, 3) per PRD
+- File extension validation
 - End-to-end test via skill invocation
 
 ### Phase 4: Gemma 4 Migration + Polish
 
 - Switch model to `gemma-4-26b-a4b-it`
 - Compare extraction quality vs Flash
-- Tune prompts for Gemma 4's behavior
-- Final testing across all document types
+- Tune prompts for Gemma 4 behavior
+- Final testing across all doc types
 
 ---
 
 ## 5. Open Questions for User
 
-1. Skill location: The repo root is the skill — publish the repo directly. No nested packaging directory needed.
-2. Two-step vs single-step inference: The PRD implies one call that both classifies and extracts. An alternative is two calls (classify first, then extract with the right schema). Single call is cheaper but may be less accurate on edge cases.
-3. Schema strictness on Gemma 4: The 26B MoE model supports structured JSON, but the E4B (long-term target) is local-only and may need a different approach (e.g., Ollama + instructor library). Worth noting for future planning.
+1. Skill location: repo root is skill — publish repo directly. No nested packaging dir needed.
+2. Two-step vs single-step inference: PRD implies one call that classifies + extracts. Alternative: two calls (classify first, then extract with right schema). Single call cheaper but may be less accurate on edge cases.
+3. Schema strictness on Gemma 4: 26B MoE supports structured JSON, but E4B (long-term target) is local-only and may need different approach (e.g., Ollama + instructor library).
 
 ---
 

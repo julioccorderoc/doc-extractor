@@ -1,62 +1,60 @@
 # Adding a New Document Type
 
-This document outlines the step-by-step process for adding support for a new document type to the `doc-extractor` skill. This guide is specifically written to be ingested by AI agents to ensure they follow the architectural conventions of this project without skipping any steps.
+Step-by-step process for adding new doc type support. Written for AI agent ingestion — follows architectural conventions, no skipped steps.
 
 ## Architecture Context
 
-The `doc-extractor` uses a **two-pass extraction strategy**:
-1. **Pass 1 (Classification):** A lightweight prompt with a small schema (`ClassificationResult`) asks the model to identify the document type.
-2. **Pass 2 (Extraction):** A focused prompt with the exact Pydantic schema for that specific document type is used to extract the payload.
+Two-pass extraction strategy:
+1. **Pass 1 (Classification):** Lightweight prompt with small schema (`ClassificationResult`) → identify doc type.
+2. **Pass 2 (Extraction):** Focused prompt with exact Pydantic schema for that type → extract payload.
 
 ## Step-by-Step Guide
 
-To add a new document type (e.g., `PACKING_SLIP`), follow these exact steps in order:
+Adding new type (e.g., `PACKING_SLIP`):
 
-### 1. Add the Document Type Enum
-Modify `scripts/schemas/_enums.py`:
-- Add the new document type to the `DocumentType` enum.
+### 1. Add Document Type Enum
+`scripts/schemas/_enums.py`:
+- Add to `DocumentType` enum
 - Example: `PACKING_SLIP = "PACKING_SLIP"`
 
-### 2. Create the Schema Model
-Create a new file in `scripts/schemas/` (e.g., `scripts/schemas/_packing_slip.py`):
-- Define the `LineItem` model (if applicable) and the main `Payload` model.
-- Use `Pydantic v2` with strict `Field(default=None, description="...")` annotations.
-- All numbers should be typed as `float` (or `int` if explicitly discrete).
-- All dates must specify `YYYY-MM-DD` format in their descriptions.
-- Ensure the main payload model is named intuitively (e.g., `PackingSlipPayload`).
+### 2. Create Schema Model
+New file `scripts/schemas/_packing_slip.py`:
+- Define `LineItem` model (if applicable) + main `Payload` model
+- Pydantic v2 with strict `Field(default=None, description="...")`
+- Numbers → `float` (or `int` if explicitly discrete)
+- Dates must specify `YYYY-MM-DD` in descriptions
+- Name intuitively (e.g., `PackingSlipPayload`)
 
-### 3. Export the Schema
-Modify `scripts/schemas/__init__.py`:
-- Import your new models from the new file.
-- Add them to the `__all__` list.
+### 3. Export Schema
+`scripts/schemas/__init__.py`:
+- Import new models
+- Add to `__all__`
 
-### 4. Wire the Envelope and Routing
-Modify `scripts/schemas/_envelope.py`:
-- Import your new payload model.
-- Add it to the `PayloadUnion` type.
-- Add a routing entry in the `PAYLOAD_SCHEMA_MAP` dictionary (e.g., `DocumentType.PACKING_SLIP: PackingSlipPayload`).
+### 4. Wire Envelope and Routing
+`scripts/schemas/_envelope.py`:
+- Import new payload model
+- Add to `PayloadUnion` type
+- Add to `PAYLOAD_SCHEMA_MAP` dict (e.g., `DocumentType.PACKING_SLIP: PackingSlipPayload`)
 
-### 5. Update the Prompts
-Modify `scripts/prompts.py`:
-- **In `_FIELD_RULES`:** Add an entry for your new document type with explicit, comma-separated field instructions (used in Pass 2).
-- **In `build_classification_prompt()`:** 
-  - Add your new document type to the list of choices.
-  - Add a one-line definition in the `Definitions:` section to help Pass 1 classify it accurately.
+### 5. Update Prompts
+`scripts/prompts.py`:
+- **`_FIELD_RULES`:** Add entry with explicit field instructions (used in Pass 2)
+- **`build_classification_prompt()`:** Add new type to choices list + one-line definition in `Definitions:` section
 
-### 6. Update the PRD
-Modify `docs/PRD.md`:
-- Under **Section 4.1 Required Sub-Schemas**, add a bulleted list of the fields your new schema extracts.
-- Update the `document_type` ENUM list in the **Section 4 Output Data Structure** JSON snippet to include the new type.
+### 6. Update PRD
+`docs/PRD.md`:
+- **Section 4.1:** Add bulleted field list
+- **Section 4:** Update `document_type` ENUM in JSON snippet
 
 ### 7. Add Unit Tests
-Modify `tests/test_schemas.py`:
-- Add a validation test `test_new_doc_payload_validates()` passing a sample JSON dictionary to verify field extraction and types.
-- Add a dispatch test `test_extraction_result_dispatches_new_doc()` to ensure `ExtractionResult.model_validate()` correctly instantiates your specific payload class via the Union.
+`tests/test_schemas.py`:
+- Validation test: `test_new_doc_payload_validates()` — sample JSON dict → verify fields + types
+- Dispatch test: `test_extraction_result_dispatches_new_doc()` — `ExtractionResult.model_validate()` instantiates correct payload class via Union
 
-### 8. Seed the Evaluation Snapshots
-- Ensure there is at least one test document in `test_docs/` that matches this new type.
-- Update `test_docs/manifest.json` mapping the new file's name to the new `DocumentType` string.
-- (To be run by the user or an agent with API keys): Run `uv run python evals/snapshot.py approve --all` to seed the snapshots.
+### 8. Seed Evaluation Snapshots
+- Add test document to `test_docs/`
+- Update `test_docs/manifest.json` with filename → `DocumentType` mapping
+- Run: `uv run python evals/snapshot.py approve --all`
 
 ## Checklist for Agents
 - [ ] Enum updated (`_enums.py`)

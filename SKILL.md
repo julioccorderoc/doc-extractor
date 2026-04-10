@@ -21,64 +21,64 @@ allowed-tools:
 
 # doc-extractor
 
-Extract structured JSON from a supply chain document or batch process a directory (PDF, PNG, JPG, WEBP)
+Extract structured JSON from supply chain documents or batch process directories (PDF, PNG, JPG, WEBP).
 
-## MANDATORY RESTRICTIONS - DO NOT VIOLATE
+## MANDATORY RESTRICTIONS
 
-1. ONLY use the script - Execute the script via `uv run python scripts/parse_vision.py` from the skill directory
-2. NEVER parse documents directly - Do NOT try to extract text using built-in vision or any other method
-3. NEVER offer alternatives - Do NOT suggest "I can try to analyze it" or similar
-4. IF SCRIPT FAILS - Follow the exit code handling rules below and STOP
-5. NO fallback methods - Do NOT attempt text extraction any other way
+1. ONLY use script — `uv run python scripts/parse_vision.py` from skill dir
+2. NEVER parse docs directly — no built-in vision or other methods
+3. NEVER offer alternatives — no "I can try to analyze it"
+4. IF SCRIPT FAILS — follow exit codes below, STOP
+5. NO fallback methods
 
 ## Arguments
 
-The invocation is: `/doc-extractor <path> [options]`
+Invocation: `/doc-extractor <path> [options]`
 
-- `<path>` / `--url <URL>` — required. Provide either a local file path, a directory path (for batch processing all supported files within), or a remote URL to download
-- `--type TYPE` — optional. If you already know the document type, pass it here to skip the classification pass. Valid values: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`
-- `--skip-liteparse` — optional. Disable the local text extraction hybrid pipeline and rely strictly on the vision model (not recommended, increases numeric hallucinations)
-- `--output <file.json>` — optional. Write the JSON directly to the specified file instead of stdout. Recommended for large payloads to bypass terminal capture limits
-- `--pages "<spec>"` — optional. Slice the PDF to specific pages before extraction (e.g., `"1-3"`, `"1,3,5"`). Only applies to PDF files
-- `--debug` — optional. Dump the raw LLM response string to stderr if JSON schema validation fails
-- `--no-summary` — optional. Disable the compact one-line summary that is printed to stderr after each extraction (enabled by default)
-- `--verbose` — optional. Show progress messages on stderr (suppressed by default; warnings and errors always shown)
+- `<path>` / `--url <URL>` — required. Local file, directory (batch), or remote URL
+- `--type TYPE` — optional. Skip classification pass. Valid: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`
+- `--skip-liteparse` — optional. Disable hybrid text extraction, vision-only (not recommended, more hallucinations)
+- `--output <file.json>` — optional. Write JSON to file instead of stdout. Recommended for large payloads
+- `--pages "<spec>"` — optional. Slice PDF pages before extraction (e.g., `"1-3"`, `"1,3,5"`). PDF only
+- `--debug` — optional. Dump raw LLM response to stderr on validation failure
+- `--no-summary` — optional. Disable compact summary on stderr (enabled by default)
+- `--verbose` — optional. Show progress on stderr (suppressed by default; warnings/errors always shown)
 
 ## Execution
 
-**Important:** Always run from the skill directory so `uv` resolves dependencies from `pyproject.toml`.
+**Run from skill directory** so `uv` resolves deps from `pyproject.toml`.
 
-If you want to skip the hybrid extraction pipeline (Vision + Local Text), opt-out by passing `--skip-liteparse`
+Skip hybrid pipeline (Vision + Local Text) with `--skip-liteparse`.
 
 ```bash
-# Recommended: Save JSON to file (summary + quiet are on by default)
+# Recommended: save JSON to file (summary + quiet on by default)
 cd ${SKILL_DIR} && uv run python scripts/parse_vision.py "<path>" --output "<path>.json"
 
-# Batch process an entire directory
+# Batch process directory
 cd ${SKILL_DIR} && uv run python scripts/parse_vision.py "path/to/folder" --output "results.json"
 
 # With type hint (single pass: extract directly)
 cd ${SKILL_DIR} && uv run python scripts/parse_vision.py "<path>" --type <TYPE> --output "<path>.json"
 
-# Without --output (JSON goes to stdout — avoid for large payloads)
+# Without --output (JSON to stdout — avoid for large payloads)
 cd ${SKILL_DIR} && uv run python scripts/parse_vision.py "<path>"
 ```
 
-Capture stderr for summary lines, warnings, and errors. When using `--output`, stdout is empty on success.
+Capture stderr for summaries, warnings, errors. With `--output`, stdout empty on success.
 
 ## Exit Code Handling
 
 | Exit code | Meaning | Action |
 |-----------|---------|--------|
-| `0` | Success | Relay the summary line(s) from stderr. If `--output` was used, tell the user the file path. Only read the full JSON if the user asks |
-| `1` | Missing API key | Tell the user: "GEMINI_DOC_EXTRACTOR_KEY is not set. Get a key at `https://aistudio.google.com/apikey` and run: `export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'`" |
-| `2` | Bad file or path | Show the stderr error message. Confirm the file exists and is a supported type (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`) |
-| `3` | API failure | Show the stderr error message. Suggest the user retry — transient errors (rate limits, server errors) resolve on their own |
+| `0` | Success | Relay summary from stderr. If `--output` used, tell user file path. Only read full JSON if user asks |
+| `1` | Missing API key | Tell user: "GEMINI_DOC_EXTRACTOR_KEY not set. Get key at `https://aistudio.google.com/apikey` and run: `export GEMINI_DOC_EXTRACTOR_KEY='your-key-here'`" |
+| `2` | Bad file or path | Show stderr error. Confirm file exists + supported type (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`) |
+| `3` | API failure | Show stderr error. Suggest retry — transient errors resolve on their own |
 
 ## Success Response Format
 
-On exit code 0:
+On exit 0:
 
-1. Tell the user where the JSON file was saved (the `--output` path)
-2. Relay the summary line(s) from stderr as the human-readable result
-3. Only read and display the full JSON if the user explicitly asks for it
+1. Tell user where JSON saved (`--output` path)
+2. Relay summary from stderr as human-readable result
+3. Only show full JSON if user explicitly asks
