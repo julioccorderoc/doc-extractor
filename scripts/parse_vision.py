@@ -71,15 +71,24 @@ RETRYABLE_CODES = {429, 500, 503}
 UPLOAD_TIMEOUT_SECS = 300  # 5 minutes max for file processing
 
 
+_quiet: bool = False
+
+
 def print_err(msg: str) -> None:
     """Print to stderr (stdout is reserved for JSON output)."""
     print(msg, file=sys.stderr)
 
 
+def print_progress(msg: str) -> None:
+    """Print progress info to stderr, suppressed when --quiet is set."""
+    if not _quiet:
+        print(msg, file=sys.stderr)
+
+
 def preprocess_file(file_path: Path, temp_dir: Path) -> Path:
     """Convert unsupported formats (.xlsx, .docx, .csv) to markdown text using MarkItDown."""
     if file_path.suffix.lower() in {".xlsx", ".docx", ".csv"}:
-        print_err(f"Converting {file_path.suffix} to markdown via MarkItDown...")
+        print_progress(f"Converting {file_path.suffix} to markdown via MarkItDown...")
         try:
             from markitdown import MarkItDown
 
@@ -122,7 +131,7 @@ def _reject_private_url(url: str) -> None:
 
 
 def download_url(url: str, dest_dir: Path) -> Path:
-    print_err(f"Downloading {url}...")
+    print_progress(f"Downloading {url}...")
     _reject_private_url(url)
     try:
         response = requests.get(url, stream=True, timeout=30)
@@ -162,7 +171,7 @@ def download_url(url: str, dest_dir: Path) -> Path:
 
 
 def slice_pdf(file_path: Path, pages_spec: str, dest_dir: Path) -> Path:
-    print_err(f"Slicing PDF to pages: {pages_spec}")
+    print_progress(f"Slicing PDF to pages: {pages_spec}")
     try:
         reader = PdfReader(file_path)
         writer = PdfWriter()
@@ -242,7 +251,7 @@ def with_retry(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
 
 def upload_file(client: genai.Client, file_path: Path) -> genai.types.File:
     """Upload a file to Google's storage. Returns immediately after upload."""
-    print_err(f"Uploading {file_path.name}...")
+    print_progress(f"Uploading {file_path.name}...")
     return client.files.upload(file=str(file_path))
 
 
@@ -256,14 +265,14 @@ def wait_for_processing(
             raise TimeoutError(
                 f"File processing timed out after {UPLOAD_TIMEOUT_SECS}s"
             )
-        print_err("Waiting for file processing...")
+        print_progress("Waiting for file processing...")
         time.sleep(2)
         uploaded = client.files.get(name=uploaded.name)
 
     if uploaded.state.name == "FAILED":
         raise RuntimeError(f"File processing failed: {uploaded.name}")
 
-    print_err(f"File ready: {uploaded.name}")
+    print_progress(f"File ready: {uploaded.name}")
     return uploaded
 
 
@@ -271,7 +280,7 @@ def classify(
     client: genai.Client, uploaded_file: genai.types.File, model: str
 ) -> ClassificationResult:
     """Pass 1: classify document type. Cheap call with a minimal response schema."""
-    print_err("Pass 1: classifying document...")
+    print_progress("Pass 1: classifying document...")
     response = client.models.generate_content(
         model=model,
         contents=[build_classification_prompt(), uploaded_file],
@@ -291,7 +300,7 @@ def extract_typed(
     text_context: str | None = None,
 ) -> str:
     """Pass 2: extract payload using the exact schema for the classified type."""
-    print_err(f"Pass 2: extracting {doc_type.value} fields...")
+    print_progress(f"Pass 2: extracting {doc_type.value} fields...")
     payload_class = PAYLOAD_SCHEMA_MAP[doc_type]
 
     contents = [
@@ -316,7 +325,7 @@ def cleanup(client: genai.Client, uploaded_file: genai.types.File) -> None:
     """Delete the uploaded file from Google's storage."""
     try:
         client.files.delete(name=uploaded_file.name)
-        print_err(f"Cleaned up: {uploaded_file.name}")
+        print_progress(f"Cleaned up: {uploaded_file.name}")
     except genai_errors.APIError as e:
         print_err(f"Warning: Cleanup failed: {e}")
 
@@ -347,7 +356,7 @@ def process_single_file(
         try:
             from liteparse import LiteParse
 
-            print_err(
+            print_progress(
                 f"Extracting local text context for {processed_path.name} via liteparse..."
             )
             lp = LiteParse()
@@ -372,12 +381,12 @@ def process_single_file(
         if hint_type is not None:
             doc_type = hint_type
             confidence = 1.0
-            print_err(f"Using caller-supplied type: {doc_type.value}")
+            print_progress(f"Using caller-supplied type: {doc_type.value}")
         else:
             classification = with_retry(classify, client, uploaded_file, model)
             doc_type = classification.document_type
             confidence = classification.confidence
-            print_err(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
+            print_progress(f"Classified as: {doc_type.value} (confidence: {confidence:.2f})")
 
         # Pass 2 — extract with specific schema
         payload = None
@@ -414,6 +423,43 @@ def process_single_file(
             cleanup(client, uploaded_file)
 
 
+def build_summary(res: ExtractionResult, filename: str) -> str:
+    """Build a compact one-line summary string for a single extraction result."""
+    doc_type = res.document_type
+    conf = res.confidence
+    p = res.payload
+
+    if doc_type == "COA" and p is not None:
+        lot = getattr(getattr(p, "header_data", None), "lot_number", "?")
+        product = getattr(getattr(p, "header_data", None), "product_name", "?")
+        tests = getattr(p, "test_results", [])
+        total = len(tests)
+        passed = sum(1 for t in tests if getattr(t, "lab_conclusion", None) == "PASS")
+        return f"COA | {lot} | {product} | {passed}/{total} PASS | confidence={conf}"
+
+    if doc_type == "INVOICE" and p is not None:
+        inv_num = getattr(p, "invoice_number", None) or "?"
+        vendor = getattr(p, "vendor_name", None) or "?"
+        items = len(getattr(p, "line_items", []))
+        total = getattr(p, "grand_total", None)
+        total_str = f"${total}" if total is not None else "?"
+        return f"INVOICE | #{inv_num} | {vendor} | {items} items | {total_str} | confidence={conf}"
+
+    if doc_type == "QUOTE" and p is not None:
+        vendor = getattr(p, "vendor_name", None) or "?"
+        items = len(getattr(p, "line_items", []))
+        return f"QUOTE | {vendor} | {items} items | confidence={conf}"
+
+    # Generic fallback for all other types
+    # Try common identifying fields
+    for field in ("product_name", "brand", "vendor_name", "doc_number"):
+        val = getattr(p, field, None) if p else None
+        if val:
+            return f"{doc_type} | {val} | confidence={conf}"
+
+    return f"{doc_type} | {filename} | confidence={conf}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Document extraction engine using Google Gemini models."
@@ -441,8 +487,21 @@ def main() -> None:
         action="store_true",
         help="Dump raw LLM response string on validation failure",
     )
+    parser.add_argument(
+        "--no-summary",
+        action="store_true",
+        help="Disable the compact one-line summary printed to stderr after each extraction",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show progress messages on stderr (suppressed by default; warnings and errors always shown)",
+    )
 
     args = parser.parse_args()
+
+    global _quiet
+    _quiet = not args.verbose
 
     if not args.file_path and not args.url:
         print_err("Error: Must provide either a local file_path or --url")
@@ -510,12 +569,19 @@ def main() -> None:
                 files_to_process.append(input_path)
 
         results = []
+        summaries = []
         for fp in files_to_process:
             res = process_single_file(fp, client, model, hint_type, args, temp_dir_path)
             if res:
-                res_dict = res.model_dump()
+                res_dict = res.model_dump(mode="json")
                 res_dict["source_file"] = fp.name
                 results.append(res_dict)
+                if not args.no_summary:
+                    summaries.append(build_summary(res, fp.name))
+
+        if not results:
+            print_err("No files were successfully processed.")
+            sys.exit(3)
 
         if len(results) == 1:
             output_json = json.dumps(results[0], indent=2)
@@ -525,13 +591,13 @@ def main() -> None:
         if args.output:
             with open(args.output, "w", encoding="utf-8") as f:
                 f.write(output_json)
-            print_err(f"Output successfully written to {args.output}")
+            print_progress(f"Output written to {args.output}")
         else:
             print(output_json)
 
-        if not results:
-            print_err("No files were successfully processed.")
-            sys.exit(3)
+        if summaries:
+            for s in summaries:
+                print_err(s)
 
 
 if __name__ == "__main__":
