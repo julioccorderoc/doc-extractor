@@ -20,7 +20,7 @@ class ProductSpecSheetPayload(SpecSheetHeader):
     )
     excipients: list[str] = Field(
         default_factory=list,
-        description="Non-active ingredients listed without amounts (e.g. ['Magnesium Stearate', 'Silicon Dioxide'])",
+        description="Non-active ingredients listed without amounts. NCL specs typically list natural-source flow agents and the capsule shell (e.g. ['Hypromellose (Veggie Capsule)', 'Rice Flour', 'L-Leucine']). Extract whatever is printed verbatim.",
     )
     includes_packaging: bool = Field(
         default=False,
