@@ -4,15 +4,21 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from ._shared import CompanyInfo, SupplementsFact, TechnicalLabelSpecs
+from ._label import LabelPayload
+from ._shared import TechnicalLabelSpecs
 
 
-class LabelProofPayload(BaseModel):
+class LabelProofPayload(LabelPayload):
     """Label proof sent by the printer for review before production.
 
-    Combines label content fields with technical print specifications.
+    A proof IS a label artwork — same content fields — plus print-job metadata
+    (date, printer, vendor/buyer SKUs) and technical print specifications.
+    All consumer-facing label fields (brand, supplements_fact_panel,
+    other_ingredients, capsule_material, flow_agents, certifications, etc.)
+    are inherited from LabelPayload and should be extracted with the same
+    semantics.
     """
 
     date: Optional[str] = Field(
@@ -21,46 +27,12 @@ class LabelProofPayload(BaseModel):
     manufacturer_name: Optional[str] = Field(
         default=None, description="Name of the printing company producing the proof"
     )
-    brand: Optional[str] = Field(default=None, description="Brand name on the label")
-    product_name: Optional[str] = Field(default=None, description="Product name")
     vendor_product_id: Optional[str] = Field(
         default=None, description="Product code or SKU used by the printer/manufacturer"
     )
     buyer_product_id: Optional[str] = Field(
         default=None, description="Product code or SKU used by the buyer"
     )
-    barcode: Optional[str] = Field(default=None, description="Barcode or FNSKU")
-    version: Optional[str] = Field(
-        default=None,
-        description="Label version or revision. Must always be prefixed with 'FNSKU ' or 'REV ' (e.g. 'REV V.3' or 'FNSKU V.3').",
-    )
-    count: Optional[int] = Field(
-        default=None, description="Number of units per container"
-    )
-    count_unit: Optional[str] = Field(
-        default=None, description="Unit type (e.g. 'capsule', 'tablet', 'softgel')"
-    )
-    servings: Optional[int] = Field(
-        default=None, description="Number of servings per container"
-    )
-    # Technical print specifications (shared with LabelOrderAckPayload)
     label_specs: Optional[TechnicalLabelSpecs] = Field(
         default=None, description="Technical print specifications"
-    )
-    # Label content
-    supplements_fact_panel: list[SupplementsFact] = Field(
-        default_factory=list, description="Supplement facts panel rows"
-    )
-    other_ingredients: Optional[str] = Field(
-        default=None, description="Other ingredients list"
-    )
-    allergens: Optional[str] = Field(default=None, description="Allergen statement")
-    company: Optional[CompanyInfo] = Field(
-        default=None, description="Company contact information on the label"
-    )
-    suggested_use: Optional[str] = Field(
-        default=None, description="Suggested use / directions"
-    )
-    marketing_text: Optional[str] = Field(
-        default=None, description="Marketing or product description text"
     )
