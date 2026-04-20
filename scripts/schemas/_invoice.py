@@ -4,20 +4,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from ._shared import CompanyInfo
+from ._shared import CommercialDocHeader, ProductIdentifiers
 
 
-class InvoiceLineItem(BaseModel):
-    vendor_product_id: Optional[str] = Field(
-        default=None,
-        description="The internal ID or SKU of the item for the vendor/manufacturer",
-    )
-    buyer_product_id: Optional[str] = Field(
-        default=None,
-        description="The ID or SKU of the item from the buyer's perspective",
-    )
+class InvoiceLineItem(ProductIdentifiers):
     description: Optional[str] = Field(
         default=None, description="Line item description"
     )
@@ -32,31 +24,11 @@ class InvoiceLineItem(BaseModel):
     total: Optional[float] = Field(default=None, description="Line item total")
 
 
-class InvoicePayload(BaseModel):
-    date: Optional[str] = Field(
-        default=None, description="Invoice date in YYYY-MM-DD format"
-    )
-    vendor_name: Optional[str] = Field(
-        default=None, description="Vendor or supplier name"
-    )
-    invoice_number: Optional[str] = Field(default=None, description="Invoice number")
-    po_number: Optional[str] = Field(default=None, description="Purchase order number")
-    bill_to: Optional[CompanyInfo] = Field(
-        default=None, description="Name and address of the company being billed"
-    )
-    ship_to: Optional[CompanyInfo] = Field(
-        default=None, description="Name and address of the company being shipped to"
-    )
+class InvoicePayload(CommercialDocHeader):
     line_items: list[InvoiceLineItem] = Field(
         default_factory=list, description="Individual line items on the invoice"
     )
-    shipping_handling: Optional[float] = Field(
-        default=None, description="Shipping, handling, or freight charges"
-    )
     tax_amount: Optional[float] = Field(default=None, description="Tax amount")
-    grand_total: Optional[float] = Field(
-        default=None, description="Total invoice amount"
-    )
     deposit_number: Optional[int] = Field(
         default=None,
         description="Deposit sequence number (e.g. 1 for 'Deposit 1', 2 for 'Deposit 2')",

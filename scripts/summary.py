@@ -44,7 +44,7 @@ def build_summary(
 
     if doc_type == DocumentType.INVOICE and p is not None:
         assert isinstance(p, InvoicePayload)
-        inv_num = p.invoice_number or "?"
+        inv_num = p.doc_number or "?"
         vendor = p.vendor_name or "?"
         items = len(p.line_items)
         total_val = p.grand_total

@@ -22,12 +22,12 @@ from ._quote import QuotePayload
 PayloadUnion = Union[
     PaymentProofPayload,
     CoaExtraction,
+    LabelOrderAckPayload,
     InvoicePayload,
     QuotePayload,
     PackagingSpecSheetPayload,
     ProductSpecSheetPayload,
     LabelProofPayload,
-    LabelOrderAckPayload,
     LabelPayload,
     GenericPayload,
 ]
