@@ -3,17 +3,7 @@ name: doc-extractor
 description: Extract structured JSON from supply chain documents (PDF, PNG, JPG, WEBP) or an entire directory of documents. Invoke when the user runs /doc-extractor <path> or asks to extract/parse a supply chain document or directory
 compatibility: Requires Python 3.13+, uv, and the GEMINI_DOC_EXTRACTOR_KEY environment variable
 author: julioccorderoc
-version: "0.1.0"
-metadata:
-  openclaw:
-    requires:
-      env:
-        - GEMINI_DOC_EXTRACTOR_KEY
-      bins:
-        - uv
-        - python
-    primaryEnv: GEMINI_DOC_EXTRACTOR_KEY
-    emoji: "📦"
+version: "0.2.0"
 allowed-tools:
   - Bash(cd * && uv run *)
   - Bash(uv run *)
