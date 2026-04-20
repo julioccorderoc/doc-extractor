@@ -7,6 +7,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ._shared import ProductIdentifiers
+
 
 class ResultOperator(str, Enum):
     """Mathematical or logical state of the test result."""
@@ -110,7 +112,7 @@ class TestResult(BaseModel):
     )
 
 
-class CoaHeader(BaseModel):
+class CoaHeader(ProductIdentifiers):
     model_config = ConfigDict(use_enum_values=True)
 
     testing_lab_name: str = Field(
@@ -127,7 +129,7 @@ class CoaHeader(BaseModel):
             "testing lab. Example: 'NutraStar Inc'."
         ),
     )
-    customer_name: Optional[str] = Field(
+    brand: Optional[str] = Field(
         None,
         description=(
             "The brand or customer the product was manufactured for. Example: 'Natural Cure labs'."
@@ -136,14 +138,6 @@ class CoaHeader(BaseModel):
     product_name: str = Field(
         ...,
         description="The full name of the dietary supplement product.",
-    )
-    vendor_product_id: Optional[str] = Field(
-        None,
-        description="The internal ID, formula number, or SKU of the item for the testing lab or manufacturer.",
-    )
-    buyer_product_id: Optional[str] = Field(
-        None,
-        description="The ID or SKU of the item from the customer's/buyer's perspective.",
     )
     lot_number: str = Field(
         ...,
@@ -170,11 +164,11 @@ class CoaHeader(BaseModel):
             "The expiration or best by date. Extract the exact text (e.g., '02/2029', '11/2028')."
         ),
     )
-    serving_size: Optional[str] = Field(
+    serving_size_text: Optional[str] = Field(
         None,
-        description="The defined serving size for the product. Example: '2 Capsules', '1'.",
+        description="The defined serving size as printed text. Example: '2 Capsules', '1'.",
     )
-    other_ingredients_statement: Optional[str] = Field(
+    other_ingredients: Optional[str] = Field(
         None,
         description=(
             "The full text block listing 'Other Ingredients' or excipients. "
