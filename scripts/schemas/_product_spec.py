@@ -6,6 +6,7 @@ from typing import Optional
 
 from pydantic import Field
 
+from ._packaging_spec import PackagingComponents
 from ._shared import FormulaComponent, SpecSheetHeader
 
 
@@ -22,7 +23,7 @@ class ProductSpecSheetPayload(SpecSheetHeader):
         default_factory=list,
         description="Non-active ingredients listed without amounts. NCL specs typically list natural-source flow agents and the capsule shell (e.g. ['Hypromellose (Veggie Capsule)', 'Rice Flour', 'L-Leucine']). Extract whatever is printed verbatim.",
     )
-    includes_packaging: bool = Field(
-        default=False,
-        description="True if this document also specifies packaging components (bottle, label, etc.)",
+    packaging_components: Optional[PackagingComponents] = Field(
+        default=None,
+        description="Full packaging specification when the manufacturer embeds packaging details (bottle, closure, label, etc.) alongside the product formula on the same document. Leave null when the document only specifies the product.",
     )

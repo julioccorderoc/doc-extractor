@@ -10,8 +10,8 @@ from ._shared import CompanyInfo, SupplementsFact
 
 
 class LabelPayload(BaseModel):
-    brand: Optional[str] = Field(default=None, description="Brand name")
-    product_name: Optional[str] = Field(default=None, description="Product name")
+    brand: str = Field(description="Brand name")
+    product_name: str = Field(description="Product name")
     barcode_text: Optional[str] = Field(
         default=None,
         description="Human-readable digits printed beneath the barcode (UPC/EAN/FNSKU text), NOT the scanned barcode image",

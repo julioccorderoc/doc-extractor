@@ -33,6 +33,7 @@ from ._label_order_ack import LabelOrderAckLineItem, LabelOrderAckPayload
 from ._packaging_spec import (
     ExtraPackagingComponent,
     PackagingComponents,
+    PackagingLabelSpecs,
     PackagingSpecSheetPayload,
 )
 from ._payment_proof import PaymentProofPayload
@@ -44,7 +45,16 @@ from ._quote import (
     QuotedItem,
     QuoteTechnicalDetail,
 )
-from ._shared import CompanyInfo, FormulaComponent, SpecSheetHeader, SupplementsFact, TechnicalLabelSpecs
+from ._shared import (
+    CommercialDocHeader,
+    CompanyInfo,
+    FormulaComponent,
+    LabelSpecs,
+    ProductIdentifiers,
+    SpecSheetHeader,
+    SupplementsFact,
+    TechnicalLabelSpecs,
+)
 
 __all__ = [
     # Enums
@@ -69,6 +79,7 @@ __all__ = [
     # Packaging spec
     "ExtraPackagingComponent",
     "PackagingComponents",
+    "PackagingLabelSpecs",
     "PackagingSpecSheetPayload",
     # Payment proof
     "PaymentProofPayload",
@@ -81,8 +92,11 @@ __all__ = [
     "QuotedItem",
     "QuoteTechnicalDetail",
     # Shared
+    "CommercialDocHeader",
     "CompanyInfo",
     "FormulaComponent",
+    "LabelSpecs",
+    "ProductIdentifiers",
     "SpecSheetHeader",
     "SupplementsFact",
     "TechnicalLabelSpecs",

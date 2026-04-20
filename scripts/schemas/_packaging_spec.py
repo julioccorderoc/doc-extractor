@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from ._shared import SpecSheetHeader
+from ._shared import LabelSpecs, SpecSheetHeader
 
 
 class ExtraPackagingComponent(BaseModel):
@@ -30,7 +30,7 @@ class PackagingComponents(BaseModel):
     )
     filler: Optional[str] = Field(
         default=None,
-        description="Packing material inside the bottle (e.g. rayon packing)",
+        description="Packing material inside the bottle (e.g. 'Cotton Coil')",
     )
     desiccant: Optional[str] = Field(
         default=None, description="Desiccant or moisture absorber specification"
@@ -38,9 +38,6 @@ class PackagingComponents(BaseModel):
     neck_band: Optional[str] = Field(
         default=None,
         description="Outer safety seal, neck band, or shrink band specification",
-    )
-    label: Optional[str] = Field(
-        default=None, description="Label description (size, barcode, FNSKU)"
     )
     master_shipper: Optional[str] = Field(
         default=None, description="Outer carton or master shipper specification"
@@ -58,26 +55,13 @@ class PackagingComponents(BaseModel):
     )
 
 
-class LabelSpecs(BaseModel):
-    """Normalized label roll specifications. Known fields have dedicated slots;
-    anything else goes in extras."""
+class PackagingLabelSpecs(LabelSpecs):
+    """Label roll specifications as tracked on a packaging spec sheet.
+    Extends the base dimensional specs with a barcode slot and an escape hatch."""
 
-    label_size: Optional[str] = Field(
+    barcode_text: Optional[str] = Field(
         default=None,
-        description="Label dimensions (e.g. '3\" x 8\"' or '70mm x 178mm')",
-    )
-    barcode: Optional[str] = Field(
-        default=None, description="Barcode or FNSKU printed on the label"
-    )
-    core_size: Optional[str] = Field(
-        default=None, description="Inner core diameter of the label roll"
-    )
-    max_outer_diameter: Optional[str] = Field(
-        default=None, description="Maximum outer diameter of the label roll"
-    )
-    wind_position: Optional[str] = Field(
-        default=None,
-        description="Rewind/wind direction (e.g. 'left to right')",
+        description="Human-readable digits printed beneath the barcode (UPC/EAN/FNSKU text) on the label",
     )
     extras: list[str] = Field(
         default_factory=list,
@@ -90,7 +74,7 @@ class PackagingSpecSheetPayload(SpecSheetHeader):
         default_factory=PackagingComponents,
         description="Normalized packaging components",
     )
-    label_specs: LabelSpecs = Field(
-        default_factory=LabelSpecs,
+    label_specs: PackagingLabelSpecs = Field(
+        default_factory=PackagingLabelSpecs,
         description="Label roll specification details",
     )
