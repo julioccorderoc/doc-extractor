@@ -22,3 +22,7 @@ fix_snapshot_timeout.sh
 .desloppify/
 .claude/
 scorecard.png
+docs/
+.github/
+.pytest_cache/
+.ruff_cache/
