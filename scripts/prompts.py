@@ -37,6 +37,18 @@ Set confidence: 1.0 = certain, 0.0 = total guess.
 # ---------------------------------------------------------------------------
 
 
+_TYPE_SPECIFIC_GUIDANCE: dict[DocumentType, str] = {
+    DocumentType.LABEL_ORDER_ACK: """
+LABEL_ORDER_ACK NOTES:
+- customer_id: extract the buyer's account number in the vendor's system when printed on the acknowledgement. It is typically labeled 'Customer #', 'Account #', 'Ship-To ID', or similar.
+""",
+    DocumentType.PRODUCT_SPEC_SHEET: """
+PRODUCT_SPEC_SHEET NOTES:
+- packaging_components: some manufacturers include packaging specifications (bottle, closure, filler, shipper, pallet, etc.) alongside the product formula on the same document. When present, populate packaging_components with the structured breakdown. Leave null when the document specifies only the product formula.
+""",
+}
+
+
 def build_extraction_prompt_for_type(
     doc_type: DocumentType, has_text_context: bool = False
 ) -> str:
@@ -51,6 +63,8 @@ CONFLICT RESOLUTION:
 - Base exact spellings, numerical values, and lot numbers on the provided text extraction.
 - If the provided text is garbled, irrelevant, or missing data, trust the image.
 """
+
+    type_specific = _TYPE_SPECIFIC_GUIDANCE.get(doc_type, "")
 
     return f"""\
 You are a document data extractor for supply chain documents.
@@ -68,4 +82,4 @@ GENERAL RULES:
 - Extract exactly what the document says. Do not infer or fabricate data.
 - If a field cannot be found, set it to null (or empty list for arrays).
 - Pay close attention to the descriptions and data types in the JSON schema.
-"""
+{type_specific}"""
