@@ -9,6 +9,8 @@ import sys
 from _output import print_err
 from schemas import DocumentType, PAYLOAD_SCHEMA_MAP
 
+DEFAULT_TIMEOUT_SECS = 300
+
 
 def build_parser(version: str) -> argparse.ArgumentParser:
     """Build the argument parser for parse_vision.py."""
@@ -28,6 +30,39 @@ def build_parser(version: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--output", help="Write JSON directly to this file instead of stdout"
+    )
+    parser.add_argument(
+        "--output-dir",
+        help=(
+            "Write one <stem>.json per input file into this directory. Required for a "
+            "resumable batch — a single --output file cannot record partial progress."
+        ),
+    )
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help=(
+            "With --output-dir, skip any input whose output already exists and parses, so "
+            "a re-run after a crash pays only for the documents still missing."
+        ),
+    )
+    parser.add_argument(
+        "--id",
+        dest="source_id",
+        help=(
+            "Caller-supplied identifier echoed into the output as source_id. Join on this "
+            "rather than source_file, which is a bare basename and collides across folders."
+        ),
+    )
+    parser.add_argument(
+        "--timeout-secs",
+        type=int,
+        default=DEFAULT_TIMEOUT_SECS,
+        help=(
+            f"Wall-clock limit for one document (default {DEFAULT_TIMEOUT_SECS}s). Local "
+            "text extraction has no timeout of its own, so without this one malformed PDF "
+            "can hang a batch indefinitely. 0 disables."
+        ),
     )
     parser.add_argument(
         "--pages",

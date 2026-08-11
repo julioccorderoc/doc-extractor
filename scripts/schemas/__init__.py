@@ -22,6 +22,7 @@ from ._envelope import (
     ExtractionResult,
     PAYLOAD_SCHEMA_MAP,
     PayloadUnion,
+    TokenUsage,
 )
 from ._generic import (
     GenericKeyValuePair,
@@ -139,4 +140,5 @@ __all__ = [
     "ExtractionResult",
     "PAYLOAD_SCHEMA_MAP",
     "PayloadUnion",
+    "TokenUsage",
 ]

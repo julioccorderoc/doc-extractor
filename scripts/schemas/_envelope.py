@@ -37,6 +37,29 @@ PayloadUnion = Union[
 ]
 
 
+class TokenUsage(BaseModel):
+    """Tokens billed for one extraction, summed across both passes.
+
+    Present so a caller running this in production can attribute cost per
+    document. Absent (null) when the model returned no usage metadata — a
+    missing block means unknown, never zero.
+    """
+
+    model: str = Field(description="Model id that produced the extraction")
+    prompt_tokens: Optional[int] = Field(
+        default=None, description="Input tokens across classification and extraction"
+    )
+    output_tokens: Optional[int] = Field(
+        default=None, description="Generated tokens across classification and extraction"
+    )
+    total_tokens: Optional[int] = Field(
+        default=None, description="Total billed tokens as reported by the API"
+    )
+    calls: int = Field(
+        default=0, description="Model calls made for this document (1 with --type, else 2)"
+    )
+
+
 class ExtractionResult(BaseModel):
     document_type: DocumentType = Field(description="Classified document type")
     confidence: float = Field(
@@ -54,6 +77,20 @@ class ExtractionResult(BaseModel):
     raw_text_fallback: Optional[str] = Field(
         default=None,
         description="Raw text extraction used when structured extraction fails",
+    )
+    usage: Optional[TokenUsage] = Field(
+        default=None,
+        description="Tokens billed for this document. Null when the API reported none.",
+    )
+    text_context_chars: Optional[int] = Field(
+        default=None,
+        description=(
+            "Characters of local text handed to the model alongside the image. 0 means "
+            "liteparse ran and found nothing — a scan it could not read; null means it "
+            "did not run or was skipped. Success otherwise has no signal at all, only "
+            "the absence of a warning, so a caller cannot tell a hybrid extraction from "
+            "a vision-only one after the fact."
+        ),
     )
 
 

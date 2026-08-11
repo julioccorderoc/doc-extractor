@@ -8,13 +8,86 @@ from schemas import (
     ExtractionResult,
     InvoicePayload,
     LabConclusion,
+    PackoutSheetPayload,
     QuotePayload,
 )
 
 
 def _md_header() -> str:
     """Return a markdown table header + separator (call once before first row)."""
-    return "| File | Type | Details | Confidence |\n| --- | --- | --- | --- |"
+    return "| File | Type | Details | Confidence | Tokens |\n| --- | --- | --- | --- | --- |"
+
+
+def _detail_parts(res: ExtractionResult) -> list[str]:
+    """Type-specific detail fields, most identifying first. Empty when unknown."""
+    doc_type = res.document_type
+    p = res.payload
+
+    if p is None:
+        return []
+
+    if doc_type == DocumentType.COA and isinstance(p, CoaExtraction):
+        header = p.header_data
+        rows = p.test_results
+        passed = sum(1 for t in rows if t.lab_conclusion == LabConclusion.PASS)
+        failed = sum(
+            1 for t in rows
+            if t.lab_conclusion in (LabConclusion.FAIL, LabConclusion.OOS)
+        )
+        # '12/27 PASS' read as 15 failures when the remainder were information-only
+        # rows or rows the certificate simply does not judge. Report the states
+        # apart so a clean COA looks clean and a real failure stands out.
+        unjudged = len(rows) - passed - failed
+        verdict = f"{passed} pass"
+        if failed:
+            verdict += f", {failed} FAIL"
+        if unjudged:
+            verdict += f", {unjudged} unjudged"
+        return [
+            (header.lot_number if header else None) or "?",
+            (header.product_name if header else None) or "?",
+            f"{verdict} of {len(rows)}",
+        ]
+
+    if doc_type == DocumentType.INVOICE and isinstance(p, InvoicePayload):
+        total_val = p.grand_total
+        return [
+            f"#{p.doc_number or '?'}",
+            p.vendor_name or "?",
+            f"{len(p.line_items)} items",
+            f"${total_val}" if total_val is not None else "?",
+        ]
+
+    if doc_type == DocumentType.QUOTE and isinstance(p, QuotePayload):
+        return [p.vendor_name or "?", f"{len(p.quoted_items)} items"]
+
+    if doc_type == DocumentType.PACKOUT_SHEET and isinstance(p, PackoutSheetPayload):
+        # Case COUNT, not row count: '12 cases' across 3 lines is 12, and that is
+        # the number the operator reconciles against the document's own total.
+        cases = sum(c.case_count for c in p.cases)
+        pallets = sum(pl.pallet_count for pl in p.pallets)
+        stated = p.stated_totals[0].units if p.stated_totals else None
+        parts = [
+            p.vendor_ref or "?",
+            f"{cases} cases",
+            f"{pallets} pallets",
+        ]
+        parts.append(f"stated {stated}" if stated is not None else "no stated total")
+        return parts
+
+    # Generic fallback for all other types — first identifying field that exists.
+    for field in ("product_name", "brand", "vendor_name", "doc_number"):
+        val = getattr(p, field, None)
+        if val:
+            return [str(val)]
+    return []
+
+
+def _token_cell(res: ExtractionResult) -> str:
+    """Billed tokens for this document, or '?' when the API reported none."""
+    if res.usage is None or res.usage.total_tokens is None:
+        return "?"
+    return str(res.usage.total_tokens)
 
 
 def build_summary(
@@ -27,51 +100,15 @@ def build_summary(
         filename: Source filename.
         fmt: Output format — ``"plain"`` (pipe-delimited) or ``"markdown"`` (table row).
     """
-    doc_type = res.document_type
-    conf = res.confidence
-    p = res.payload
-
-    if doc_type == DocumentType.COA and p is not None:
-        assert isinstance(p, CoaExtraction)
-        lot = p.header_data.lot_number if p.header_data else "?"
-        product = p.header_data.product_name if p.header_data else "?"
-        total = len(p.test_results)
-        passed = sum(1 for t in p.test_results if t.lab_conclusion == LabConclusion.PASS)
-        details = f"{lot} / {product} / {passed}/{total} PASS"
-        if fmt == "markdown":
-            return f"| {filename} | COA | {details} | {conf} |"
-        return f"{filename} | COA | {lot} | {product} | {passed}/{total} PASS | confidence={conf}"
-
-    if doc_type == DocumentType.INVOICE and p is not None:
-        assert isinstance(p, InvoicePayload)
-        inv_num = p.doc_number or "?"
-        vendor = p.vendor_name or "?"
-        items = len(p.line_items)
-        total_val = p.grand_total
-        total_str = f"${total_val}" if total_val is not None else "?"
-        details = f"#{inv_num} / {vendor} / {items} items / {total_str}"
-        if fmt == "markdown":
-            return f"| {filename} | INVOICE | {details} | {conf} |"
-        return f"{filename} | INVOICE | #{inv_num} | {vendor} | {items} items | {total_str} | confidence={conf}"
-
-    if doc_type == DocumentType.QUOTE and p is not None:
-        assert isinstance(p, QuotePayload)
-        vendor = p.vendor_name or "?"
-        items = len(p.quoted_items)
-        details = f"{vendor} / {items} items"
-        if fmt == "markdown":
-            return f"| {filename} | QUOTE | {details} | {conf} |"
-        return f"{filename} | QUOTE | {vendor} | {items} items | confidence={conf}"
-
-    # Generic fallback for all other types
-    # Try common identifying fields
-    for field in ("product_name", "brand", "vendor_name", "doc_number"):
-        val = getattr(p, field, None) if p else None
-        if val:
-            if fmt == "markdown":
-                return f"| {filename} | {doc_type} | {val} | {conf} |"
-            return f"{filename} | {doc_type} | {val} | confidence={conf}"
+    doc_type = res.document_type.value
+    parts = _detail_parts(res)
+    tokens = _token_cell(res)
 
     if fmt == "markdown":
-        return f"| {filename} | {doc_type} | - | {conf} |"
-    return f"{filename} | {doc_type} | confidence={conf}"
+        details = " / ".join(parts) if parts else "-"
+        return f"| {filename} | {doc_type} | {details} | {res.confidence} | {tokens} |"
+
+    fields = [filename, doc_type, *parts, f"confidence={res.confidence}"]
+    if tokens != "?":
+        fields.append(f"tokens={tokens}")
+    return " | ".join(fields)
