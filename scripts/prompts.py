@@ -14,7 +14,8 @@ def build_classification_prompt() -> str:
     return """\
 Classify this supply chain document. Choose exactly one document_type:
   COA, INVOICE, QUOTE, PRODUCT_SPEC_SHEET, PACKAGING_SPEC_SHEET,
-  LABEL, LABEL_PROOF, LABEL_ORDER_ACK, PAYMENT_PROOF, UNKNOWN
+  LABEL, LABEL_PROOF, LABEL_ORDER_ACK, PAYMENT_PROOF, PACKING_LIST,
+  PACKOUT_SHEET, UNKNOWN
 
 Definitions:
 - COA: Certificate of Analysis (test results, lot numbers, pass/fail specifications)
@@ -26,6 +27,8 @@ Definitions:
 - LABEL_PROOF: Print proof from a printer for client review (has technical print specs: substrate, ink colors, corner radius, wind position)
 - LABEL_ORDER_ACK: Label vendor order acknowledgement confirming quantities, pricing, and technical print specifications.
 - PAYMENT_PROOF: Bank payment confirmation or screenshot (payer, payee, amount, confirmation number)
+- PACKING_LIST: Generic shipment manifest enclosed with freight — what shipped, how many, ship-from/ship-to, carrier or tracking reference. Commercial grain: line items and quantities, no case-by-case or pallet-by-pallet breakdown.
+- PACKOUT_SHEET: A manufacturer's finished-goods pack-out record issued after a production run. Physical grain: individual case lines and pallet lines, each carrying a lot code, units per case, and dimensions or weights. Titles like 'Packout', 'Pack Out', 'Rework / New Case Dims', or a pickup block with pallet dimensions are strong signals. If the document breaks the shipment down into cases and pallets with lot codes, it is PACKOUT_SHEET, not PACKING_LIST.
 - UNKNOWN: Cannot classify or unreadable
 
 Set confidence: 1.0 = certain, 0.0 = total guess.
@@ -45,6 +48,22 @@ LABEL_ORDER_ACK NOTES:
     DocumentType.PRODUCT_SPEC_SHEET: """
 PRODUCT_SPEC_SHEET NOTES:
 - packaging_components: some manufacturers include packaging specifications (bottle, closure, filler, shipper, pallet, etc.) alongside the product formula on the same document. When present, populate packaging_components with the structured breakdown. Leave null when the document specifies only the product formula.
+""",
+    DocumentType.PACKOUT_SHEET: """
+PACKOUT_SHEET NOTES:
+
+The consumer of this extraction derives missing values itself and flags each
+derivation for a human to check. A value you compute arrives indistinguishable
+from one the manufacturer actually printed, so it silently deletes that flag.
+Leaving a gap open is always the better answer.
+
+- units_per_case: state it ONLY if the document prints a per-case quantity. If the document gives a line total and a case count, do NOT divide one by the other — leave units_per_case null.
+- case_type: FULL or PARTIAL only when the document uses those words (or 'standard' / 'remainder' / 'odd'). A case that is neither is a real answer: leave it UNKNOWN. Do not judge fullness from the quantities.
+- weight_basis: GROSS, TARE, or NET only when the document labels the weight that way. A bare 'WEIGHT' column stays UNKNOWN — the same word covers both an empty pallet and a loaded one, and the magnitude is not proof.
+- exp_date: many documents print the expiration on the first row of a lot group only. Leave it null on the rows that do not print it; do not carry it down.
+- pallet grouping: '9 Pallets x 16 Boxes' is ONE pallet row with pallet_count=9. Never expand a group into one row per pallet.
+- stated_totals: extract every total the document asserts about itself, even when it looks redundant with the line rows. Those totals are how the consumer checks the extraction.
+- po_ref: copy any PO string verbatim. It is frequently the vendor's own numbering rather than the buyer's, so it is evidence, not an identifier to act on.
 """,
     DocumentType.COA: """
 COA NOTES:

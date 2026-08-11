@@ -15,6 +15,8 @@ from ._label import LabelPayload
 from ._label_proof import LabelProofPayload
 from ._label_order_ack import LabelOrderAckPayload
 from ._packaging_spec import PackagingSpecSheetPayload
+from ._packing_list import PackingListPayload
+from ._packout import PackoutSheetPayload
 from ._payment_proof import PaymentProofPayload
 from ._product_spec import ProductSpecSheetPayload
 from ._quote import QuotePayload
@@ -29,6 +31,8 @@ PayloadUnion = Union[
     ProductSpecSheetPayload,
     LabelProofPayload,
     LabelPayload,
+    PackoutSheetPayload,
+    PackingListPayload,
     GenericPayload,
 ]
 
@@ -73,5 +77,7 @@ PAYLOAD_SCHEMA_MAP: dict[DocumentType, type[BaseModel]] = {
     DocumentType.LABEL_PROOF: LabelProofPayload,
     DocumentType.LABEL_ORDER_ACK: LabelOrderAckPayload,
     DocumentType.LABEL: LabelPayload,
+    DocumentType.PACKOUT_SHEET: PackoutSheetPayload,
+    DocumentType.PACKING_LIST: PackingListPayload,
     DocumentType.UNKNOWN: GenericPayload,
 }
