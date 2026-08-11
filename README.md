@@ -28,7 +28,10 @@ Agent verifies file, runs extraction, instantly has fully parsed JSON payload.
 | `PACKAGING_SPEC_SHEET` | Packaging specs. Components (bottles, closures, desiccants), label rolls. |
 | `LABEL` | Finished label artwork. Fact panels, ingredients, allergens, barcodes. |
 | `LABEL_PROOF` | Printer proof docs. Technical print specs (substrate, inks, winds) + label content. |
+| `LABEL_ORDER_ACK` | Label printer order acknowledgements. Order/job numbers, quantities, print specs. |
 | `PAYMENT_PROOF` | Bank transfers/payment screenshots. Payer, payee, amounts, dates. |
+| `PACKING_LIST` | Shipment manifest. Commercial grain: line items, quantities, ship-from/ship-to, carrier ref. |
+| `PACKOUT_SHEET` | Manufacturer's finished-goods pack-out record. Physical grain: case and pallet lines with lot codes, units per case, dimensions, weights. |
 
 ---
 
@@ -95,20 +98,31 @@ uv run python scripts/parse_vision.py <path_or_url> [options]
 **Options:**
 
 - `--url <URL>`: Download remote doc to temp file before extraction.
-- `--type TYPE`: Skip classification, extract directly. Valid: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `UNKNOWN`.
-- `--use-liteparse`: Hybrid pipeline — local OCR text appended to Gemini prompt. Reduces numeric hallucinations on dense tables.
+- `--type TYPE`: Skip classification, extract directly. Valid: `COA`, `INVOICE`, `QUOTE`, `PRODUCT_SPEC_SHEET`, `PACKAGING_SPEC_SHEET`, `LABEL`, `LABEL_PROOF`, `LABEL_ORDER_ACK`, `PAYMENT_PROOF`, `PACKING_LIST`, `PACKOUT_SHEET`, `UNKNOWN`.
+- `--skip-liteparse`: Disable the hybrid pipeline. Local text extraction runs by default and reduces numeric hallucinations on dense tables; turning it off is vision-only.
 - `--output <file.json>`: Write JSON to file instead of stdout. Recommended for large docs.
+- `--output-dir <dir>`: Write one `<stem>.json` per input. Required for a resumable batch — a single `--output` file cannot record partial progress.
+- `--skip-existing`: With `--output-dir`, skip inputs whose output already exists and parses.
+- `--id <string>`: Caller-supplied identifier echoed into the output as `source_id`.
+- `--timeout-secs <n>`: Wall-clock limit per document (default `300`, `0` disables).
 - `--pages "<spec>"`: Slice PDF pages (e.g. `"1-3"`, `"1,3,5"`) before extraction.
+- `--schema TYPE|all`: Print the JSON schema for a document type and exit. No API key needed.
 - `--debug`: Dump raw LLM string to stderr on validation failure.
 
 **Exit codes:**
+
+A batch returns the worst code it encountered.
 
 | Outcome | Exit code | stdout | stderr |
 | --- | --- | --- | --- |
 | Success | `0` | Strictly typed JSON | Progress logs |
 | Missing API Key | `1` | (Empty) | Error message |
 | Unsupported file | `2` | (Empty) | Error message |
-| API Failure | `3` | (Empty) | Exception trace |
+| API failure after retries | `3` | (Empty) | Error message |
+| Schema validation failure | `4` | (Empty) | Error message (raw response with `--debug`) |
+| Per-document timeout | `5` | (Empty) | Error message |
+| Quota exhausted (batch stops early) | `6` | (Empty) | Error message |
+| Local processing failure | `7` | (Empty) | Error message |
 
 No interactive prompts. stdout = exclusively JSON. Everything else → stderr.
 

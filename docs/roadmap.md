@@ -1,7 +1,7 @@
 # ROADMAP
 
-- **Version:** 0.1.0
-- **Last Updated:** 2026-04-06
+- **Version:** 0.3.0
+- **Last Updated:** 2026-08-10
 - **Primary Human Owner:** Julio Cordero
 
 ## Operating Rules for Planner Agent
@@ -418,7 +418,7 @@
 
 ### EPIC-024: SKILL.md Compression & Batch Docs
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** None
 - **Objective:** Reduce SKILL.md token footprint ~30-40%. Document batch output structure.
 - **Context:** SKILL.md loads into agent context on every invocation (~1,200 tokens). Redundancies: "run from skill dir" repeated in MANDATORY + examples, exit code "Action" column restates obvious, multiple similar examples.
@@ -435,7 +435,7 @@
 
 ### EPIC-025: Summary Improvements
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-020
 - **Objective:** Richer summaries (filename in all paths, markdown format, summary-only triage mode) to reduce agent token waste from reformatting and unnecessary extraction.
 - **Context:** Agent spends tokens re-presenting summaries as markdown tables. `build_summary()` omits filename in COA/Invoice/Quote paths. Triage workflows ("did everything pass?") don't need full JSON extraction.
@@ -452,7 +452,7 @@
 
 ### EPIC-026: `--schema` Flag (Self-Documenting Schemas)
 
-- **Status:** `Pending`
+- **Status:** `Complete`
 - **Dependencies:** EPIC-002
 - **Objective:** Let agents answer "what fields were extracted?" without reading full JSON payloads. Self-documenting schema access via CLI.
 - **Context:** Currently agent must `Read` full JSON file to answer schema questions. Pydantic models already have `.model_json_schema()` — just needs a CLI surface.
@@ -466,10 +466,58 @@
   - `--schema all` prints all schemas
   - SKILL.md includes brief field reference
 
+### EPIC-027: PACKOUT_SHEET + PACKING_LIST Document Types
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-002
+- **Objective:** Extract a manufacturer's pack-out record as a first-class type instead of falling through to `UNKNOWN` and the generic `tables[]` payload.
+- **Context:** Packout documents classified `UNKNOWN`, so consumers had to reconstruct case and pallet rows by walking `GenericPayload.tables[]` and matching header text against an alias table. That walk works but is fragile and lives downstream of the only component that can actually see the document. A generic packing list is a genuinely different document — commercial line items, no case/pallet grain — so it gets its own thin type rather than being folded in; without the distinction a freight manifest would classify as PACKOUT_SHEET and report empty geometry as if the manufacturer had omitted it.
+- **Scope:**
+  - `PACKOUT_SHEET` + `PACKING_LIST` on `DocumentType`
+  - `schemas/_packout.py` — cases, pallets, stated totals, pickup block, document kind (PACKOUT vs REWORK), plus `PackoutCaseType` / `PackoutWeightBasis` enums that both default to `UNKNOWN`
+  - `schemas/_packing_list.py` — line items, carrier/shipment refs, ship-from/ship-to
+  - Classification definitions that separate the two by grain (cases and lots vs line items)
+  - Extraction guidance carrying the never-compute rule (see below)
+  - Packout branch in `build_summary()`
+- **Key decision — never compute what the document does not print:** if a document states a line total and a case count but not a case size, `units_per_case` stays null. The consumer derives it and flags the derivation for a human. A value computed here arrives indistinguishable from one the manufacturer actually printed, which silently deletes that flag. The same rule governs `case_type` and `weight_basis`, which stay `UNKNOWN` unless the document says otherwise. This is the single most important thing in the packout prompt.
+- **Done when:**
+  - `--type PACKOUT_SHEET` and `--type PACKING_LIST` are accepted
+  - `--schema PACKOUT_SHEET` prints the payload schema
+  - `uv run pytest` passes
+
+### EPIC-028: COA Extraction Fidelity
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-002
+- **Objective:** Stop the COA schema from forcing the model to invent values, and surface the certificate's own report date.
+- **Context:** Five `CoaHeader` / `TestResult` fields were required (`...`). A required field on a structured-output schema is an instruction to produce a value, so a certificate with no acceptance limit for a row produced a fabricated `specification_target`, and a row with no stated verdict produced a `lab_conclusion` the model derived by comparing numbers itself. Separately, no field carried the date the certificate was issued, so every consumer had to ask a human for it.
+- **Scope:**
+  - `specification_target`, `lab_conclusion`, `testing_lab_name`, `product_name`, `lot_number` → Optional, each with a description saying what null means
+  - New `CoaHeader.date_report`
+  - COA extraction guidance reinforcing null-over-invent
+- **Done when:**
+  - A certificate row with no printed spec extracts as null, not as a restatement of the result
+  - `date_report` populates when the certificate prints an issue date
+
+### EPIC-029: Token Usage Reporting
+
+- **Status:** `Complete`
+- **Dependencies:** EPIC-001
+- **Objective:** Make the cost of an extraction observable to whoever runs it.
+- **Context:** The CLI reported latency but never tokens, so per-document cost was unmeasurable in production — a run could be characterized only as "low cents, unmeasurable".
+- **Scope:**
+  - `UsageTally` in `gemini.py`, folded across both passes and across retries (every attempt is billed, so the sum is the honest number)
+  - `TokenUsage` block on `ExtractionResult` — null when the API reports nothing, never zero
+  - Tokens column in the markdown summary, `tokens=` field in the plain summary
+- **Done when:**
+  - A successful extraction emits `usage.total_tokens`
+  - `usage` is null rather than 0 when the API reports no metadata
+
+
 ## Minor Backlog
 
 - [ ] Add `COA_RAW` document type and schema parsing based on PRD
-- [ ] Add `PACKING_LIST` document type and schema
+- [x] Add `PACKING_LIST` document type and schema (EPIC-027)
 - [ ] Add `CARRIER_LABEL` document type and schema
 - [ ] Add `BOX_CONTENT_LABEL` document type and schema
 - [ ] Add `BOL` (Bill of Lading) document type and schema

@@ -64,15 +64,30 @@ Always returns object matching this top-level schema. `payload` structure change
 
 ```json
 {
-  "document_type": "string (ENUM: COA | INVOICE | QUOTE | PRODUCT_SPEC_SHEET | PACKAGING_SPEC_SHEET | LABEL | LABEL_PROOF | LABEL_ORDER_ACK | PAYMENT_PROOF | UNKNOWN)",
+  "document_type": "string (ENUM: COA | INVOICE | QUOTE | PRODUCT_SPEC_SHEET | PACKAGING_SPEC_SHEET | LABEL | LABEL_PROOF | LABEL_ORDER_ACK | PAYMENT_PROOF | PACKING_LIST | PACKOUT_SHEET | UNKNOWN)",
   "confidence": "number (0.0 to 1.0)",
   "extracted_date": "ISO 8601 Timestamp",
   "payload": {
     // Dynamic schema based on document_type
   },
-  "raw_text_fallback": "string (used only if table extraction fails)"
+  "raw_text_fallback": "string (used only if table extraction fails)",
+  "usage": {
+    "model": "string (model id that produced the extraction)",
+    "prompt_tokens": "int | null",
+    "output_tokens": "int | null",
+    "total_tokens": "int | null",
+    "calls": "int (1 with --type, else 2)"
+  },
+  "text_context_chars": "int | null",
+  "source_file": "string (basename; batch runs only)",
+  "source_path": "string (absolute path; batch runs only)",
+  "source_id": "string (echo of --id; present only when passed)"
 }
 ```
+
+`usage` is `null` when the API reports no metadata — a missing block means unknown, never zero, and it is summed across both passes and across retries because every attempt is billed. `text_context_chars` is `0` when local text extraction ran and found nothing (an unreadable scan) and `null` when it did not run, so a caller can tell a hybrid extraction from a vision-only one after the fact.
+
+Join batch results on `source_id`, not `source_file` — the latter is a bare basename and collides across folders.
 
 ### 4.1 Required Sub-Schemas (The payload object)
 
@@ -87,6 +102,11 @@ All extracted dates: `YYYY-MM-DD` format.
 - **Missing API Key:** Print `export GEMINI_DOC_EXTRACTOR_KEY='...'` → `sys.exit(1)`. Agent relays to user.
 - **Unsupported File Type:** Bad extension (e.g., `.exe`) → `sys.exit(2)`. Agent tells user: "Only supports PDFs, Images, and Office documents."
 - **API Timeout/Rate Limit:** Exponential backoff (retries = 3). If fails → `sys.exit(3)`. Agent logs: "Google API rate-limited. Retrying later."
+- **Schema Validation Failure:** Model response does not satisfy the payload schema → `sys.exit(4)`. Distinct from an API failure: retrying unchanged usually reproduces it. `--debug` dumps the raw response.
+- **Per-Document Timeout:** One document exceeds `--timeout-secs` (default 300) → `sys.exit(5)`. A wall-clock alarm covers every phase, including local text extraction, which has no timeout of its own.
+- **Quota Exhausted:** A 429 that is a quota wall rather than transient rate limiting → `sys.exit(6)`. Batch stops immediately instead of hitting the same wall once per remaining file. Resume with `--output-dir --skip-existing`.
+- **Local Processing Failure:** Anything not attributable to the API → `sys.exit(7)`.
+- **Batch Exit Code:** A batch returns the worst code it saw; partial output does not imply success.
 - **Unreadable Document:** Model can't identify → return `"document_type": "UNKNOWN"`, populate `"raw_text_fallback"` + generic tables. Agent flags for human review.
 
 ## 6. Success Metrics
