@@ -8,8 +8,11 @@ to the Gemini API's response_schema parameter.
 from ._coa import (
     CoaExtraction,
     CoaHeader,
+    Footnote,
     LabConclusion,
+    MeasurementBasis,
     ResultOperator,
+    SpecBoundType,
     TestCategory,
     TestResult,
 )
@@ -62,8 +65,11 @@ __all__ = [
     # COA
     "CoaExtraction",
     "CoaHeader",
+    "Footnote",
     "LabConclusion",
+    "MeasurementBasis",
     "ResultOperator",
+    "SpecBoundType",
     "TestCategory",
     "TestResult",
     # Invoice

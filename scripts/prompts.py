@@ -46,6 +46,19 @@ LABEL_ORDER_ACK NOTES:
 PRODUCT_SPEC_SHEET NOTES:
 - packaging_components: some manufacturers include packaging specifications (bottle, closure, filler, shipper, pallet, etc.) alongside the product formula on the same document. When present, populate packaging_components with the structured breakdown. Leave null when the document specifies only the product formula.
 """,
+    DocumentType.COA: """
+COA NOTES:
+- specification_target: many certificates print results with no acceptance limit (information-only rows). Leave it null there rather than restating the result as its own spec.
+- lab_conclusion: report the certificate's own verdict. If the certificate states no spec for a row, that row is INFORMATION_ONLY — do not decide PASS or FAIL yourself by comparing numbers.
+- assessed_conclusion: this is where YOUR judgement goes, and it stays separate from lab_conclusion. Leave it null unless the row is decidable on its own terms. It is NOT decidable when no limit is printed, when the spec is a percentage and no label claim appears, or when spec_basis and result_basis differ. A wrong assessment is worse than none: the consumer treats a disagreement between the two fields as a finding to investigate, and a fabricated verdict destroys that signal.
+- date_report: the date the certificate was issued or reported, which is usually distinct from the manufacture and expiration dates. Leave null if only manufacture/expiration dates appear.
+- lot_number holds the FINISHED PRODUCT lot only — the code that reaches the bottle. Certificates commonly print an in-process or bulk lot beside it, and they are different numbers. Put every non-finished lot in other_lots_noted with the label the document gives it. If nothing is labelled as the finished lot, leave lot_number null rather than promoting whichever lot appears first.
+- report_number is the lab's own document id (report, certificate, or work-order number), not a lot. Some certificates are named by report number alone, so the two are easy to confuse — a number that identifies the paperwork rather than the batch belongs here.
+- BASIS: record spec_basis and result_basis independently, each read from its OWN unit. They disagree more often than you would expect — a heavy metal is routinely reported '0.064 ug/cap' against a limit of '<5 ug/day'. Do not reconcile them, do not convert, do not copy one into the other. A unit with no denominator is UNKNOWN, which is a real answer rather than a fallback.
+- SPEC STRUCTURE: fill specification_uom, spec_bound_type, spec_low and spec_high from what is printed. 'NMT 3 mcg/Unit' is MAX with spec_high 3 and uom 'mcg/Unit'. '893 - 987 mg' is RANGE 893 to 987. '835.00 mg ± 10%' is RANGE 751.5 to 918.5. 'Absent/10g' and 'Conforms' are QUALITATIVE with no numbers. A row with no printed limit is NONE.
+- LABEL CLAIM: when the specification is a percentage, the certificate prints the claim it is a percentage of in a nearby column. Capture it in label_claim_text / label_claim_numeric / label_claim_uom — without it, '100-150%' cannot be evaluated by anyone downstream.
+- FOOTNOTES: capture every marked note in the document-level footnotes array, verbatim and unabridged, and list the markers appearing on each row in that row's footnote_markers. A footnote can change what a limit means — one may state that a criterion written '<100,000' is read as a maximum of 200,000, another may explain that a result below its printed floor is accepted for measurement uncertainty. Record the note; never fold its reasoning into a conclusion yourself.
+""",
 }
 
 
