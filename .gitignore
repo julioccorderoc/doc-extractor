@@ -10,6 +10,10 @@ wheels/
 .venv
 
 # local files/folders
+# NOTE: docs/ and tests/ are TRACKED and stay tracked. They were listed here
+# once, which had no effect on already-tracked files and left the ignore file
+# asserting the opposite of the repo's actual contents. The real concern was
+# never documentation — it was test_docs/, which holds real business documents.
 test_docs/
 .ai/
 .DS_Store
@@ -17,12 +21,10 @@ evals/
 eng.traineddata
 .github/workflows/
 experiments/
-tests/
 fix_snapshot_timeout.sh
 .desloppify/
 .claude/
 scorecard.png
-docs/
 .github/
 .pytest_cache/
 .ruff_cache/
